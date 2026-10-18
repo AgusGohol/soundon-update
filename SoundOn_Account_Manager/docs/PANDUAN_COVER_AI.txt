@@ -1,0 +1,5 @@
+SoundOn 3.10.1
+Edit > Lagu & File > Sumber cover AI SoundOn. Pilih gaya, Simpan, Mulai otomatis pada draf yang sama.
+Add image prompt selalu kosong, termasuk prompt lama. Bot Generate lalu Use this, tetap berhenti di Review.
+Catatan ditambahkan sebelum memilih Previously released? untuk membantu mengetahui titik berhenti. Penyebab berhenti di Track distribution belum diketahui tanpa pesan error.
+Tes simulasi lulus; belum diuji langsung pada SoundOn pengguna.

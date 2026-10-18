@@ -1,0 +1,84 @@
+PANDUAN PEMBARUAN OTOMATIS (mulai versi 3.12.0)
+
+Cara kerja
+Setiap kali aplikasi dibuka, aplikasi memeriksa rilis terbaru di repo GitHub Anda.
+Jika ada versi lebih baru: unduh, cocokkan SHA-256, cadangkan file lama, pasang,
+lalu aplikasi terbuka kembali sendiri. Jika offline atau GitHub bermasalah,
+aplikasi tetap dibuka seperti biasa dengan versi yang ada.
+
+Yang TIDAK pernah disentuh pembaruan:
+- soundon.license (izin perangkat)
+- update_config.json (pengaturan pembaruan)
+- folder %USERPROFILE%\SoundOnAccounts (akun, antrean, profil Chrome)
+
+Cadangan file lama : %USERPROFILE%\SoundOnAccounts\update_backups (5 terakhir)
+Catatan/log        : %USERPROFILE%\SoundOnAccounts\update_log.txt
+
+
+A. PERSIAPAN SEKALI SAJA
+
+1. Buat akun di https://github.com (gratis) jika belum punya.
+2. Klik tombol + (kanan atas) > New repository.
+   - Repository name : soundon-update   (bebas)
+   - Pilih PUBLIC (repo privat tidak bisa dibaca aplikasi tanpa login)
+   - Klik Create repository.
+   Repo ini cukup dipakai untuk menaruh rilis; kode tidak perlu diunggah.
+3. Pasang versi 3.12.0 ini secara manual satu kali (ekstrak, jalankan run_app.bat).
+   Salin soundon.license lama ke folder baru.
+4. Di aplikasi: Pengaturan > Periksa Pembaruan.
+   Isi repo:  username-github-anda/soundon-update
+   Centang "Perbarui otomatis setiap kali aplikasi dibuka" > Simpan.
+   Lakukan di setiap komputer, atau minta Claude menanamkan nama repo di
+   aplikasi agar komputer baru tidak perlu mengisi lagi.
+
+
+B. SETIAP ADA VERSI BARU
+
+Claude memberikan 2 file: SoundOn_Update_<versi>.zip dan manifest.json.
+
+1. Buka repo di GitHub > Releases (kolom kanan) > Draft a new release.
+2. Choose a tag > ketik v<versi>, contoh v3.12.1 > Create new tag.
+3. Release title: v3.12.1 (boleh ditambah catatan).
+4. Seret KEDUA file (ZIP dan manifest.json) ke kotak lampiran.
+5. Pastikan "Set as the latest release" tercentang, BUKAN pre-release.
+6. Publish release.
+
+Selesai. Setiap komputer akan memperbarui diri saat aplikasi dibuka berikutnya.
+Untuk memasang segera tanpa menutup aplikasi: Pengaturan > Periksa Pembaruan >
+Periksa pembaruan sekarang (pastikan tidak ada unggahan yang berjalan).
+
+
+C. JIKA ADA MASALAH
+
+- "Belum ada rilis di repo ini": rilis belum dipublikasikan, nama repo salah,
+  atau repo masih Private.
+- Pembaruan gagal 2 kali untuk versi yang sama: pemasangan otomatis berhenti
+  untuk versi itu agar aplikasi tidak terus mengulang. Pasang dari Pengaturan
+  atau kirim isi update_log.txt kepada Claude.
+- Mengembalikan versi lama: tutup aplikasi, salin isi folder cadangan di
+  update_backups ke folder aplikasi.
+
+Membuat paket sendiri (opsional, perlu Python):
+  python tools\buat_rilis.py --notes "ringkasan perubahan"
+Hasil ada di folder dist\. Versi diambil dari APP_VERSION di soundon_dashboard.py.
+
+
+PENERBITAN OTOMATIS (sejak 3.16.0)
+----------------------------------
+Di komputer admin saja:
+  1. Buat token di GitHub > Settings > Developer settings > Personal access tokens >
+     Fine-grained tokens > Generate new token.
+       - Repository access: Only select repositories > AgusGohol/soundon-update
+       - Permissions > Repository permissions > Contents: Read and write
+  2. Aplikasi > Pengaturan > Pembaruan > "Atur token penerbit…", tempel token, Simpan & uji.
+     Token disimpan di %USERPROFILE%\.soundon_github_token (bisa dihapus dari jendela yang sama,
+     atau dicabut di GitHub kapan saja).
+  3. Folder %USERPROFILE%\SoundOnRilis\masuk dibuat otomatis. Setiap paket rilis
+     (SoundOn_Update_<versi>.zip + manifest.json) yang masuk ke folder itu diperiksa lalu
+     diterbitkan ke GitHub dalam ±1 menit selama aplikasi admin terbuka.
+     Berhasil -> SoundOnRilis\terbit\<versi>, gagal -> SoundOnRilis\gagal (alasan di log_terbit.txt).
+
+Klien memasang versi baru saat aplikasi dibuka, dan memeriksa tiap 20 menit selama
+aplikasi terbuka (hitung mundur 30 detik, bisa ditunda; tidak saat sinkron/unggah).
+
+Baris perintah (opsional): python tools/buat_rilis.py lalu python tools/terbitkan_rilis.py

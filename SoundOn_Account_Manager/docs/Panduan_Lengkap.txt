@@ -1,0 +1,408 @@
+CATATAN 3.13.0: Impor/Ekspor CSV dan grafik mini sudah dihapus dari aplikasi. Bagian panduan lama tentang fitur tersebut tidak berlaku lagi. Lihat Riwayat_Perbaikan.txt untuk fitur terbaru.
+
+PANDUAN & RIWAYAT FITUR SOUNDON ACCOUNT MANAGER
+Dikompilasi dari dokumentasi asli paket v2.7.
+
+======================================================================
+README.txt
+======================================================================
+SoundOn Visual Dashboard — UI baru (Windows)
+
+1. Tutup aplikasi SoundOn versi lama.
+2. Ekstrak ZIP ke folder baru.
+3. Jalankan install_dependencies.bat jika Playwright belum terpasang.
+4. Jalankan run_app.bat.
+5. Data akun lama dibaca dari %USERPROFILE%\SoundOnAccounts\accounts.json.
+
+Fitur: dark dashboard, sidebar, ringkasan streams/pendengar/saldo/akun, kalender tanggal, pencarian dan pengurutan akun, status Chrome lokal, impor/ekspor CSV, tombol Buka/Streams/Pendengar/Saldo/Data, profil Chrome terpisah.
+
+PENTING:
+- Tidak ada pendapatan periode; kartu kedua adalah total pendengar.
+- Angka contoh pada gambar referensi TIDAK disertakan; aplikasi menampilkan data lokal Anda.
+- Tombol Refresh Tampilan hanya membaca data lokal, BUKAN refresh semua akun otomatis.
+- Tombol Streams/Pendengar/Saldo membaca halaman SoundOn yang sudah login via Playwright, sesuai izin penggunaan layanan.
+- Pilih tanggal dan platform yang sama di SoundOn sebelum membaca streams/pendengar.
+- Filter lokal mencocokkan tanggal mulai dan akhir secara persis dengan data tersimpan.
+- Status Chrome aktif hanya menandakan port debug Chrome akun tersedia, bukan jaminan SoundOn sedang login.
+- Jika SoundOn menampilkan '27,5 rb', angka di dashboard merupakan perkiraan 27.500.
+- Jangan mengirim cookie, token, password atau kode OTP.
+
+VERSI ROUNDED UI
+- Panel dashboard, ringkasan, dan daftar akun kini memiliki sudut membulat.
+- Tombol utama, navigasi, avatar akun, dan tombol aksi menggunakan rounded canvas.
+- Tidak membutuhkan dependensi UI tambahan; tetap menggunakan Tkinter dan Playwright.
+- Fungsi baca Streams/Pendengar/Saldo serta penyimpanan akun tetap dipertahankan.
+- Perlu diuji pada Windows; beberapa kontrol sistem seperti pilihan platform dan scrollbar
+  tetap memakai gaya bawaan ttk.
+
+UPDATE GRAFIK & PERFORMA
+- Grafik batang Streams per Akun memakai data yang sudah tersimpan untuk rentang tanggal
+  dan platform yang dipilih. Bukan grafik harian: data harian belum tersedia dari
+  pembacaan kartu total Streams SoundOn. Delapan akun terbesar ditampilkan di grafik;
+  seluruh akun tetap ditampilkan di tabel dan dihitung di total.
+- Pengecekan status Chrome dipindahkan ke thread latar belakang setiap 5 detik;
+  mengetik pencarian, mengurutkan, dan refresh tidak lagi menunggu koneksi Chrome.
+- Pencarian ditunda 180 ms saat mengetik dan sudut rounded menggunakan canvas ulang
+  sehingga resize jendela lebih ringan.
+- Refresh Tampilan membaca data lokal. Tombol Streams/Pendengar/Saldo tetap membaca
+  halaman SoundOn yang sudah login dan sesuai dengan periode yang dipilih.
+
+UPDATE GRAFIK MINI PER AKUN
+- Grafik batang horizontal besar dihapus. Kolom GRAFIK STREAMS berisi batang mini
+  per akun dan grafik TOTAL di bawah tabel, sesuai referensi.
+- Grafik mini hanya memakai streams HARIAN yang benar-benar tersedia. Total periode
+  dari kartu Streams SoundOn tidak dapat diubah menjadi tren harian tanpa data harian.
+- Bila data harian belum tersedia, kolom menampilkan 'Belum ada data harian',
+  bukan batang acak atau angka buatan.
+- Untuk menampilkan grafik: klik 'Impor Harian' dan pilih CSV UTF-8 dengan kolom
+  account_id,date,platform,streams. Contoh struktur ada di template_harian.csv.
+- Tanggal format YYYY-MM-DD; account_id harus sesuai nomor akun di dashboard;
+  platform harus sama persis dengan filter (misalnya Semua Platform).
+- Impor Harian hanya menambahkan data grafik, tidak mengubah total periode
+  Streams/Pendengar/Saldo yang sudah berhasil dibaca.
+- Data grafik disimpan di akun lokal %USERPROFILE%\\SoundOnAccounts\\accounts.json.
+
+UPDATE GRAFIK MINI BERDASARKAN TOTAL STREAMS
+- Grafik mini otomatis tampil dari TOTAL streams periode masing-masing akun.
+- Tidak perlu impor data harian; tombol Impor Harian disembunyikan.
+- Dua belas batang hanyalah desain visual dengan pola tetap; tinggi keseluruhan
+  dibandingkan terhadap akun dengan streams terbanyak. BUKAN grafik tren harian.
+- Grafik TOTAL di bawah tabel menampilkan visualisasi total gabungan.
+- Refresh Streams masing-masing akun untuk memperbarui angka dan grafik.
+
+
+======================================================================
+README_ANALYTICS_BULAN.txt
+======================================================================
+SoundOn Account Manager v1.7 — Analytics asal Streams per bulan
+
+Perubahan:
+- Halaman Analytics memakai kartu akun dan kartu artis dengan bar persentase Indonesia/USA.
+- Pilih bulan riwayat (YYYY-MM). Setiap pembacaan tetap memperlihatkan rentang tanggal persis; data 7 hari tidak dianggap data sebulan.
+- Pembacaan ulang artis, platform, dan periode yang sama menggantikan hasil lama, bukan membuat duplikat.
+- Data yang tidak terbaca tidak diisi angka perkiraan.
+
+Cara menggunakan:
+1. Dashboard: pilih tanggal dan platform.
+2. Chrome akun: buka Artist Insights > Overview, pilih periode/platform sama dan gulir ke Streams by region.
+3. Analytics: klik Baca Asal Streams pada akun, isi nama artis.
+4. Pilih bulan di Analytics untuk melihat riwayat persentase. Setiap artis tetap terpisah.
+
+Catatan: Akun, profil Chrome dan data berada di folder SoundOnAccounts pengguna, bukan di ZIP. Cadangkan data sebelum pembaruan. Tidak ada akses API SoundOn atau bypass login.
+
+
+======================================================================
+README_ARTIS_LAGU_UI.txt
+======================================================================
+SoundOn Account Manager v1.5.0 — Katalog & UI
+
+BARU:
+- Halaman Daftar Akun memakai kartu akun yang lebih rapi dengan avatar, pemisah halus, dan tiga panel statistik.
+- Tiap akun memiliki Jumlah HP, Jumlah Artis, dan Jumlah Lagu.
+- Klik Daftar Akun > Ubah Artis & Lagu untuk mengisi kedua angka secara manual.
+- Angka juga bisa diubah melalui tombol Data, dan menu ⋯ > Atur artis & lagu.
+- Tabel dashboard menampilkan kolom ARTIS dan LAGU.
+- Ekspor CSV menambahkan artist_count dan song_count.
+
+Data akun tetap disimpan pada %USERPROFILE%\SoundOnAccounts\accounts.json.
+Akun lama otomatis memakai nilai 0 sampai kamu mengisinya. Tidak ada data lama yang dihapus.
+
+CATATAN: Jumlah artis dan lagu adalah catatan manual, bukan data yang dibaca otomatis dari SoundOn.
+Cadangkan folder SoundOnAccounts sebelum memasang pembaruan.
+
+
+======================================================================
+README_ASAL_STREAMS.txt
+======================================================================
+SoundOn Account Manager 1.6.0 — Asal Streams per artis
+
+Fitur baru:
+- Menu Analytics menampilkan persentase asal Streams dari Indonesia dan USA per artis dan per akun.
+- Menu Daftar Akun > Asal Streams membaca SVG ECharts yang sudah tampil pada Artist Insights.
+- Menyimpan data ke ~/SoundOnAccounts/accounts.json pada region_records, dipisahkan berdasarkan ID artis, rentang tanggal dan platform.
+- Tidak memakai API tersembunyi, tidak meminta password, dan tidak melewati CAPTCHA atau 2FA.
+
+Cara pakai:
+1. Tutup aplikasi lama, pasang ZIP dengan Update Helper atau ekstrak ke folder aplikasi.
+2. Jalankan run_app.bat. Buka akun SoundOn melalui tombol Buka agar Chrome terhubung.
+3. Di Chrome akun tersebut, buka Artist Insights > Overview, lalu gulir ke Streams by region.
+4. Pilih periode tanggal dan platform di SoundOn sama dengan yang dipilih di dashboard. Jangan biarkan Last 7 Days jika dashboard memilih satu bulan.
+5. Pada aplikasi buka Daftar Akun > Asal Streams (atau Analytics > Baca Asal Streams).
+6. Konfirmasi filter, masukkan nama artis, dan lihat hasil di menu Analytics.
+
+PENTING:
+- Persentase ini adalah asal pendengar ARTIS, bukan negara tempat akun didaftarkan.
+- Jika satu akun punya banyak artis, baca tiap artis secara terpisah; tidak dijumlah atau dirata-rata menjadi persentase akun.
+- Jika SVG berubah menjadi Canvas atau tata letak berubah, pembacaan akan menampilkan pesan error, bukan mengarang angka.
+- Persentase hanya akurat untuk periode/platform yang benar-benar dipilih di SoundOn; aplikasi meminta konfirmasi pengguna, tidak mengubah filter website secara otomatis.
+- Data akun lama dan profil Chrome tidak ada di ZIP ini; data tetap di folder SoundOnAccounts.
+- Pengujian sintaks dilakukan, pembacaan pada akun SoundOn nyata perlu diuji di Windows.
+
+
+======================================================================
+README_BUKA_STREAMS_SALDO_v2_3.txt
+======================================================================
+SoundOn Account Manager v2.3 — Buka Streams dan Saldo langsung
+
+↗ Streams: https://www.soundon.global/library/analytics
+↗ Saldo / Buka Penghasilan Saya: https://www.soundon.global/library/royalty
+
+Tombol Baca Streams, Pendengar, dan Baca Saldo tetap terpisah untuk
+membaca angka dari halaman yang sudah tampil. Membuka halaman tidak
+berarti data otomatis terbaca. Pastikan akun telah login.
+
+Aplikasi menggunakan profil Chrome terpisah untuk setiap akun.
+Data akun tetap di %USERPROFILE%\SoundOnAccounts.
+
+Instal melalui SoundOn Update Helper setelah menutup aplikasi.
+
+
+======================================================================
+README_BUKA_STREAMS_SALDO_v2_4.txt
+======================================================================
+SoundOn Account Manager v2.4 — Buka halaman Ulasan Analitik sesuai tangkapan layar
+
+Tombol ↗ Streams pada Dashboard membuka langsung:
+https://www.soundon.global/library/analytics?endTime=now-2&startTime=now-8
+(7 hari terakhir sesuai tautan pada screenshot pengguna).
+
+Tombol ↗ Saldo membuka https://www.soundon.global/library/royalty
+
+Masing-masing akun tetap memakai profil Chrome terpisah. Pastikan akun sudah login.
+Data akun di %USERPROFILE%\SoundOnAccounts tidak dihapus.
+
+
+======================================================================
+README_DUA_KOLOM.txt
+======================================================================
+SOUNDON DASHBOARD - DUA KOLOM NEGARA (v1.3.0)
+
+Perubahan:
+- Bagian atas Dashboard menampilkan dua panel besar berdampingan: Indonesia dan Negara Lain.
+- Masing-masing panel: Streams, Pendengar, Saldo Tersedia, Jumlah Akun.
+- Daftar akun di bawah kembali ke tabel lebar dengan grafik mini dan tombol Buka, Streams, Pendengar, Saldo, Data.
+- Negara panel kiri dan kanan dapat dipilih lewat dropdown masing-masing.
+- Filter tanggal dan platform berlaku untuk kedua panel; filter pencarian/kategori hanya menyaring tabel.
+- Kategori akun diubah dari tombol ... > Pindahkan kategori / negara.
+- Akun lama tanpa kategori ditandai Belum dikategorikan, tidak otomatis diasumsikan Indonesia.
+- Jika Streams = 0, periksa apakah tanggal filter cocok PERSIS dengan periode data yang tersimpan.
+- Tombol Refresh Tampilan hanya membaca data lokal, bukan menarik data SoundOn secara otomatis.
+
+Pemasangan: Tutup aplikasi, gunakan SoundOn Update Helper dan pilih ZIP ini, atau ekstrak ke folder baru lalu jalankan run_app.bat.
+Data akun dan Chrome tetap di %USERPROFILE%\SoundOnAccounts. Cadangkan folder tersebut sebelum pembaruan.
+
+
+======================================================================
+README_FILTER_ANALYTICS_v1_8.txt
+======================================================================
+SoundOn Account Manager v1.8 — Filter tanggal Analytics
+
+- Menu Analytics kini memiliki dropdown BULAN, kolom DARI dan SAMPAI, ikon kalender,
+  serta tombol Terapkan Tanggal di bagian atas halaman.
+- Memilih bulan mengisi tanggal 1 hingga hari terakhir bulan tersebut (28/29/30/31).
+- Rentang khusus dapat diisi manual (YYYY-MM-DD) atau melalui kalender.
+- Hasil asal Streams ditampilkan hanya untuk rentang tanggal yang persis cocok
+  dengan periode hasil pembacaan yang tersimpan, agar data 7 hari tidak keliru
+  dilabeli sebagai satu bulan penuh.
+- Tombol Baca Asal Streams di halaman Analytics memakai rentang Analytics terpilih.
+  Sesuaikan filter tanggal pada situs SoundOn sebelum mengonfirmasi pembacaan.
+- Dropdown bulan tidak mengubah filter SoundOn secara otomatis.
+- Data akun tersimpan pada folder SoundOnAccounts pengguna; tidak disertakan di ZIP.
+
+
+======================================================================
+README_FIX_BAHASA.txt
+======================================================================
+PERBAIKAN BAHASA ANALYTICS — ID / EN
+
+Tombol Pendengar kini mengenali judul kartu "Pendengar" (Indonesia) dan "Listeners" (English).
+Tombol Streams tetap membaca "Streams". Angka singkat seperti 27,5 rb dan 6.8K dibaca sebagai perkiraan.
+Saldo IDR/USD tetap didukung.
+
+CARA PEMASANGAN:
+Tutup aplikasi, gunakan SoundOn Update Helper dengan ZIP ini, lalu buka Chrome akun dari aplikasi.
+Buka halaman Analytics dan atur rentang tanggal yang sama sebelum menekan Pendengar atau Streams.
+
+Catatan: ini pembacaan halaman yang sudah login, bukan API resmi SoundOn.
+
+
+======================================================================
+README_FIX_SCROLL_v1_9.txt
+======================================================================
+SoundOn Account Manager - perbaikan scroll Analytics v1.9
+
+Perbaikan:
+- Mouse wheel dan touchpad diarahkan ke halaman sidebar yang sedang aktif.
+- Scroll tidak lagi bergantung pada event Enter/Leave canvas yang tertutup frame konten.
+- Mendukung mouse wheel Windows serta event roda mouse Linux.
+- Posisi scroll kembali ke atas saat halaman/filter dirender ulang.
+- Scrollbar vertikal tetap dapat digeser dengan mouse.
+
+Pemasangan: tutup aplikasi, cadangkan data, kemudian pasang ZIP ini melalui Update Helper.
+Data akun dan profil Chrome berada di folder penyimpanan pengguna dan tidak termasuk dalam ZIP.
+
+
+======================================================================
+README_JUMLAH_HP.txt
+======================================================================
+SoundOn Dashboard — Jumlah HP (v1.4.0)
+
+- Kolom JUMLAH HP per akun di Tabel Semua.
+- Pada menu ... setiap akun pilih Atur jumlah HP.
+- Jumlah HP juga bisa diisi melalui tombol Data.
+- Tampilan Kolom Negara menunjukkan jumlah HP tiap akun dan total per kelompok.
+- Ekspor CSV menyertakan phone_count; impor CSV lama tetap didukung.
+- Data lama tetap berada di %USERPROFILE%\SoundOnAccounts.
+- Angka HP diisi manual dan tidak dibaca dari SoundOn.
+- Jumlah HP total adalah penjumlahan per akun, bukan jumlah perangkat unik.
+
+
+======================================================================
+README_KATEGORI.txt
+======================================================================
+SoundOn Dashboard - Kolom Negara (v1.2.0)
+
+1. Jalankan run_app.bat (install_dependencies.bat jika belum pernah).
+2. Tampilan awal 'Kolom Negara' memisahkan kategori ke dua kolom berdampingan.
+3. Akun lama tidak diasumsikan berasal dari Indonesia: semuanya muncul di 'Belum dikategorikan'.
+4. Pada setiap akun klik tombol ... > Pindahkan kategori untuk memilih Indonesia atau Negara Lain.
+5. Klik '+ Kategori' untuk menambah kelompok negara lain.
+6. Pilih filter kategori untuk menampilkan satu kelompok saja; 'Semua Kategori' untuk semua.
+7. Pilih 'Tabel Semua' untuk tampilan tabel lama dengan semua tombol termasuk Data.
+8. Data akun tetap tersimpan di %USERPROFILE%\SoundOnAccounts\accounts.json;
+   kategori tambahan di %USERPROFILE%\SoundOnAccounts\categories.json.
+9. Grafik mini mengikuti total streams periode, bukan data harian.
+10. Pembacaan SoundOn tetap memerlukan Chrome akun yang login; tidak melewati CAPTCHA atau 2FA.
+
+CATATAN: Update Helper dapat memasang ZIP ini ke folder aplikasi lama. Tutup aplikasi
+sebelum update dan cadangkan folder SoundOnAccounts terlebih dahulu.
+
+
+======================================================================
+README_MENU_SIDEBAR.txt
+======================================================================
+SOUNDON ACCOUNT MANAGER — MENU SIDEBAR AKTIF
+
+Versi ini memanfaatkan kelima menu sidebar sebagai halaman tersendiri:
+- Dashboard: dua panel ringkasan negara, filter tanggal/platform, tabel akun dan grafik mini.
+- Daftar Akun: daftar akun dikelompokkan menurut negara, jumlah HP, pengelolaan akun dan tombol pembacaan.
+- Analytics: total Streams dan Pendengar per negara untuk periode dan platform yang dipilih di Dashboard; grafik mini total per akun (bukan tren harian).
+- Penghasilan: saldo tersedia per negara dan akun, serta tombol Baca Saldo.
+- Pengaturan: pembaruan aplikasi, backup data JSON dan tambah kategori negara.
+
+Cara pasang: tutup aplikasi, gunakan SoundOn Update Helper untuk memasang ZIP ini atau ekstrak ke folder baru dan jalankan run_app.bat.
+
+Data akun dan profil Chrome disimpan di %USERPROFILE%\SoundOnAccounts, terpisah dari kode aplikasi.
+Backup JSON dari Pengaturan mencadangkan data akun dan kategori, tetapi TIDAK mencadangkan profil Chrome.
+Jumlah HP adalah data manual; Streams, Pendengar dan Saldo menggunakan pembacaan halaman SoundOn yang telah login atau data lokal.
+Tidak ada pendapatan periode yang ditampilkan.
+
+
+======================================================================
+README_PEMBARUAN.txt
+======================================================================
+SOUNDON DASHBOARD - PEMBARUAN DALAM APLIKASI
+
+Bagian ini sudah diganti mulai versi 3.12.0. Pembaruan kini otomatis melalui GitHub Releases.
+Lihat docs\PANDUAN_PEMBARUAN_OTOMATIS.txt.
+
+
+======================================================================
+README_PENGHASILAN_v2_0.txt
+======================================================================
+SoundOn Account Manager v2.0 — Pembaruan tampilan Penghasilan
+
+- Ringkasan saldo Indonesia (IDR), Amerika Serikat (USD), dan jumlah akun.
+- Dua panel negara berdampingan dengan tabel akun, waktu pembaruan, dan tombol Baca Saldo.
+- Kategori lainnya tetap ditampilkan terpisah, tidak hilang.
+- Tidak menggabungkan IDR dan USD dengan kurs perkiraan.
+- Tidak mengubah lokasi data: %USERPROFILE%\SoundOnAccounts.
+
+Pemasangan: tutup aplikasi, cadangkan folder aplikasi lama, ekstrak ZIP ini,
+jalankan run_app.bat. Jika memakai Update Helper, pilih ZIP ini sebagai paket.
+Tidak perlu memindahkan accounts.json atau profil Chrome.
+
+
+======================================================================
+README_PERBAIKAN_JUDUL.txt
+======================================================================
+PERBAIKAN JUDUL PANEL NEGARA
+
+Judul panel kiri dan kanan kini mengikuti pilihan negara pada dropdown. Contoh: Amerika Serikat -> AMERIKA SERIKAT. Data akun tidak diubah.
+
+Pasang melalui SoundOn Update Helper dengan memilih ZIP ini atau ekstrak ke folder baru lalu jalankan run_app.bat. Tutup aplikasi lama terlebih dahulu.
+
+
+======================================================================
+README_PERUBAHAN_v2_6.txt
+======================================================================
+HANYA tombol Buka pada kolom AKSI Dashboard menuju Ulasan Analitik. Streams dan Saldo tetap seperti v2.4. Aksi Buka lain tidak berubah.
+
+
+======================================================================
+README_PERUBAHAN_v2_7.txt
+======================================================================
+PERBAIKAN TOMBOL AKSI v2.7
+
+Buka: membuka halaman Ulasan Analitik pada profil akun terkait.
+Streams: hanya membaca kartu Streams dari halaman SoundOn yang sudah terbuka.
+Pendengar: hanya membaca kartu Pendengar dari halaman SoundOn yang sudah terbuka.
+Saldo: hanya membaca saldo dari halaman SoundOn yang sudah terbuka.
+Tombol Streams dan Saldo tidak membuka/navigasi halaman Chrome.
+Aksi khusus Buka Penghasilan Saya pada halaman Penghasilan tetap ada.
+
+
+======================================================================
+README_ROYALTY_v2_1.txt
+======================================================================
+SoundOn Account Manager v2.1 — Buka Royalty per akun
+
+Halaman Penghasilan sekarang memiliki tombol Buka Royalty di samping Baca Saldo
+untuk tiap akun Indonesia, Amerika Serikat, dan kategori lainnya.
+
+Buka Royalty memakai profil Chrome akun terkait. Jika Chrome sudah dibuka
+melalui aplikasi dan terhubung, aplikasi membuka menu Analytics & Earnings >
+My Earnings (Penghasilan Saya) pada situs SoundOn. Jika belum terhubung,
+aplikasi membuka profil Chrome akun itu dan memberi petunjuk login.
+
+Tidak menggunakan URL Royalty yang belum terverifikasi dan tidak membaca
+password, cookie, atau token. Jika SoundOn mengubah nama menu, navigasi
+mungkin perlu diperbarui; Anda tetap bisa membuka My Earnings secara manual.
+
+Instalasi: tutup aplikasi, backup folder aplikasi, lalu pasang ZIP dengan
+SoundOn Update Helper. Data akun ada di %USERPROFILE%\\SoundOnAccounts.
+
+
+======================================================================
+README_ROYALTY_v2_2.txt
+======================================================================
+SoundOn Account Manager v2.2 — Langsung ke Penghasilan Saya
+
+Tombol Buka Penghasilan Saya di halaman Penghasilan membuka langsung:
+https://www.soundon.global/library/royalty
+
+Akun menggunakan profil Chrome terpisah yang sudah ada. Bila Chrome akun
+sudah terhubung, tab SoundOn akun tersebut dinavigasikan langsung ke URL
+royalty. Bila Chrome belum terbuka, profil akun dibuka dengan URL tersebut.
+Jika belum login, selesaikan login SoundOn pada Chrome akun terkait.
+
+Tombol Baca Saldo tetap terpisah. Tidak ada perubahan folder data akun:
+%USERPROFILE%\SoundOnAccounts
+
+Instal: tutup aplikasi, cadangkan folder aplikasi, lalu pasang ZIP dengan
+SoundOn Update Helper atau ekstrak ke folder aplikasi lama.
+
+
+======================================================================
+README_SALDO_USD.txt
+======================================================================
+PERBAIKAN SALDO MULTI-MATA-UANG (v1.5.1)
+
+- Tombol Saldo membaca IDR / Rp dan USD / US$ / $ dari halaman Penghasilan SoundOn yang sudah login.
+- Data saldo disimpan per akun bersama kode currency. Akun lama tanpa currency tetap IDR.
+- Dashboard dan Penghasilan menampilkan total IDR dan USD TERPISAH; tidak menjumlah mata uang berbeda atau mengonversi kurs.
+- Form Data kini memiliki pilihan mata uang IDR/USD. CSV ekspor memakai kolom balance dan currency; CSV lama balance_idr tetap dapat diimpor.
+- Jika saldo ditampilkan sebagai angka tanpa simbol atau kode mata uang di halaman SoundOn, pembacaan otomatis akan menolak untuk mencegah salah mata uang.
+- Cadangkan folder %USERPROFILE%\SoundOnAccounts sebelum update.
+- Tidak ada CAPTCHA/2FA yang dilewati. Pengujian login langsung SoundOn perlu dilakukan di Windows pengguna.
+

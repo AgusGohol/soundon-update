@@ -1,0 +1,97 @@
+SOUNDON ACCOUNT MANAGER 3.9.0 — ALUR BERDASARKAN REKAMAN
+
+Memakai rekaman pengisian manual sampai Review sebagai referensi.
+Bot tidak mengirim rilis. Implementasi belum diuji langsung pada DOM
+SoundOn/Windows, sehingga belum dapat dijamin berhasil penuh.
+
+PERBAIKAN UTAMA
+- Kolom Lyrics language, Explicit dan Lyrics untuk lagu non-instrumental.
+- Lima bagian kredit: Primary artists, Contributors, Production and
+  additional contributors, Songwriters, dan Lyricists.
+- Memilih nama dari dropdown akun yang sudah tersedia, bukan menganggap
+  semua peran diisi nama artis utama. Peran harus sesuai pembuat lagu.
+- Submit dalam dialog Add primary artist/contributor/production/songwriter/
+  lyricist menyimpan kredit ke draf. Bot boleh menekan tombol tersebut
+  hanya di dalam dialog berjudul yang dikenali.
+- Submit akhir pada Review tidak ditekan.
+- Jika Next memunculkan errors detected dan Fix now membuka Trim online,
+  bot dapat mengonfirmasi klip default 0:00–0:15. Ini hanya dilakukan bila
+  pilihan antrean First 15 seconds. Manual berhenti untuk pilihan segmen.
+- File audio yang sudah menampilkan nama cocok dan Upload complete pada
+  bagian audio dilewati untuk menghindari upload ulang pada retry.
+
+CARA MEMPERBARUI
+1. Cadangkan aplikasi dan data lama. Tutup semua jendela aplikasi lama.
+2. Ekstrak ZIP ke folder baru. Salin file izin perangkat bila diperlukan.
+3. Jalankan install_dependencies.bat jika dependensi belum tersedia.
+4. Jalankan run_app.bat dari folder baru, bukan pintasan lama.
+5. Pastikan judul jendela Unggah Lagu menampilkan 3.9.0.
+Paket mengikuti proyek Python sebelumnya; bukan EXE mandiri.
+Data akun dan antrean tetap pada folder pengguna SoundOnAccounts.
+
+CARA MENGISI DATA
+Unggah Lagu > pilih lagu lama > Edit, atau Tambah lagu untuk entri baru.
+- Lagu & File: judul, artis utama, audio, cover, bahasa judul, genre,
+  songwriter (nama lengkap). Ejaan opsi harus sesuai SoundOn.
+- Rilis & Hak: jawaban sesuai kondisi lagu, tanggal YYYY-MM-DD.
+- Kredit & Lirik: bahasa lirik, lyricist, contributor dan perannya,
+  production contributor dan perannya, Explicit, cara pembuatan klip,
+  serta teks lirik opsional.
+Nama semua orang harus tersedia dalam dropdown SoundOn akun tujuan.
+Pembuatan artis baru/profil Spotify/Apple baru belum diotomatisasi.
+Bila nama tidak tersedia atau profil meminta data tambahan, bot berhenti.
+Jangan menggunakan nama panggung sebagai nama penulis jika tidak sesuai.
+
+UNTUK CONTOH ALUR REKAMAN
+Bahasa judul English, genre Pop, Instrumental No, bahasa lirik English,
+Explicit Non-Explicit. Peran contoh yang terlihat: Vocalist dan Producer.
+Gunakan hanya bila benar sesuai lagu; nama untuk tiap peran diisi sendiri.
+Klip First 15 seconds berarti bagian lagu 0:00–0:15.
+Cover menggunakan file pilihan Anda, bukan generator AI SoundOn.
+
+JALANKAN
+1. Pilih entri antrean > Buka akun. Login manual bila diperlukan.
+2. Buka draf/formulir Track information lagu tujuan, gunakan bahasa Inggris
+   seperti rekaman untuk dialog kredit. Sisakan satu tab SoundOn.
+3. Tutup dialog/dropdown sisa percobaan sebelumnya sebelum mulai.
+4. Klik Mulai otomatis dan periksa akun/lagu pada konfirmasi awal.
+5. Bot mengisi, menyimpan kredit, menekan Next, lalu berhenti di Review.
+6. Periksa seluruh informasi di Review. Submit akhir tetap milik pengguna.
+Banyak akun didukung melalui entri antrean dengan profil Chrome terpisah;
+jalankan entri yang dipilih satu per satu, bukan seluruh akun bersamaan.
+
+KONDISI YANG MASIH PERLU MANUAL
+- Rilis lama, UPC/ISRC lama, Global release, ownership Other, publisher/PRO Yes.
+- Featured artist, kredit tambahan di luar satu entri tiap bagian,
+  pembuatan nama/profil baru, cover AI, pemilihan klip selain 15 detik awal.
+- Dialog tanggal terlalu dekat. Pada rekaman SoundOn menampilkan peringatan
+  Release Date Too Soon. Bot tidak melewati peringatan ini sendiri.
+- Kontrol tanpa label/role yang belum cocok dengan deteksi saat ini.
+- Terjemahan Indonesia untuk dialog kredit belum dipetakan; gunakan English.
+
+Platform mengikuti pilihan draf SoundOn. TikTok pre-release Skip for now,
+YouTube Content ID Off, tanpa membeli add-on. CML/CapCut mengikuti On/Off
+antrean. On mengaktifkan pilihan dengan ketentuannya; baca ketentuan situs.
+Jawaban hak cipta tidak boleh diubah agar sekadar cocok dengan bot.
+
+JIKA BERHENTI
+Periksa catatan proses. Jangan membuat draf baru. Perbaiki bagian yang
+ditunjuk di browser atau data antrean. Tutup dialog sisa sebelum mengulang.
+Kirim screenshot kontrol/dialog yang sedang terbuka bersama pesan terbaru.
+Bot tidak mengulang klik Next kecuali setelah konfirmasi klip yang terlihat
+pada alur rekaman. Kesalahan lain tidak dilewati dengan Later.
+Batas tunggu pemrosesan/Next 120 detik. Hentikan diperiksa berkala; operasi
+Playwright aktif mengikuti timeout. Browser/draf tidak ditutup oleh bot.
+
+CADANGAN
+Antrean: SoundOnAccounts/upload_queue.json. Backup akun lama belum mencakup
+antrean; cadangkan file ini secara terpisah. File lagu/cover tetap di lokasi
+pilihan. Metadata/lokasi file/URL draf disimpan lokal. Sesi login menggunakan
+profil Chrome lama; tidak menyimpan sandi tambahan pada antrean.
+
+VERIFIKASI
+Kompilasi Python lulus. Uji simulasi tahap dan stop Review, metadata wajib,
+instrumental/non-instrumental, lima kredit, Submit hanya dalam dialog kredit,
+penolakan Submit final/dialog lain, konfirmasi klip sesuai pilihan pengguna,
+dropdown, input file, pembatalan, akun/tab dan penyimpanan antrean lulus.
+Belum ada pengujian unggahan langsung pada SoundOn.

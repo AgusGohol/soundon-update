@@ -1,0 +1,75 @@
+# Menerbitkan rilis Latest otomatis setiap kali APP_VERSION di soundon_dashboard.py
+# naik ke versi yang belum punya tag. Lihat SoundOn_Account_Manager/docs/CATATAN_PENGEMBANG.md.
+name: Rilis otomatis
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths: ['SoundOn_Account_Manager/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rilis
+  cancel-in-progress: false
+
+jobs:
+  rilis:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: SoundOn_Account_Manager
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Baca versi
+        id: v
+        run: |
+          VER=$(sed -n "s/^APP_VERSION='\([0-9.]*\)'.*/\1/p" soundon_dashboard.py)
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VER" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Rilis v$VER sudah ada, tidak ada yang diterbitkan."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Periksa versi di 3 tempat
+        if: steps.v.outputs.skip != 'true'
+        run: |
+          VER=${{ steps.v.outputs.version }}
+          grep -q "SoundOn $VER — Studio unggah" upload_manager.py
+          head -1 README.txt | grep -q "$VER"
+          grep -q "^$VER:" docs/Riwayat_Perbaikan.txt
+
+      - name: Buat paket
+        if: steps.v.outputs.skip != 'true'
+        run: python tools/buat_rilis.py
+
+      - name: Terbitkan rilis Latest
+        if: steps.v.outputs.skip != 'true'
+        run: |
+          VER=${{ steps.v.outputs.version }}
+          NOTES=$(python -c "import json;print(json.load(open('dist/manifest.json'))['notes'])")
+          gh release create "v$VER" "dist/SoundOn_Update_$VER.zip" dist/manifest.json \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+            --title "SoundOn $VER" --notes "$NOTES"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Verifikasi manifest Latest
+        if: steps.v.outputs.skip != 'true'
+        run: |
+          VER=${{ steps.v.outputs.version }}
+          for i in $(seq 1 12); do
+            LIVE=$(curl -sSfL "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/manifest.json?t=$(date +%s)" || true)
+            echo "$LIVE" | grep -q "\"version\": \"$VER\"" && { echo "OK: Latest = $VER"; exit 0; }
+            sleep 5
+          done
+          echo "Latest belum menunjukkan $VER"; exit 1

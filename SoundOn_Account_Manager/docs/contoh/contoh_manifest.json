@@ -1,0 +1,7 @@
+{
+  "version": "3.12.1",
+  "tag": "v3.12.1",
+  "zip_name": "SoundOn_Update_3.12.1.zip",
+  "sha256": "ISI_64_KARAKTER_SHA256_ZIP",
+  "notes": "Contoh saja. manifest.json asli dibuat otomatis oleh tools/buat_rilis.py."
+}

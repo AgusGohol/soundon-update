@@ -1,0 +1,191 @@
+RIWAYAT PERBAIKAN SOUNDON ACCOUNT MANAGER
+
+SoundOn Account Manager 3.9.1
+
+Perbaikan pilihan radio Instrumental dan radio lain: klik label terkait, tunggu status aktif, berhenti jika belum terverifikasi.
+
+Cara melanjutkan: tutup aplikasi lama, ekstrak versi ini ke folder baru, jalankan run_app.bat. Buka akun yang sama dan draf yang tadi berhenti, pilih lagu di antrean, lalu Mulai otomatis. Pastikan metadata Kredit & Lirik sudah lengkap. Bot tetap berhenti pada Review.
+
+Validasi: tes simulasi radio dan regresi alur lulus. Belum diuji langsung pada SoundOn/Windows pengguna.
+
+
+3.9.2: pemeriksaan radio menerima status checked pada wrapper radio khusus, selain checked pada input native. Status tidak aktif/ambigu tetap menghentikan pengisian.
+Tutup versi lama, ekstrak ke folder baru, jalankan run_app.bat, buka akun dan draf yang sama lalu Mulai otomatis. Berhenti pada Review.
+Tes simulasi dan pemeriksaan JavaScript lulus; belum diuji pada DOM SoundOn pengguna.
+
+
+3.9.3: gulir bagian kredit ke tengah layar sebelum mencari Add, termasuk Songwriters dan Lyricists.
+Tutup versi lama, ekstrak versi baru, jalankan run_app.bat. Buka draf yang sama lalu Mulai otomatis. Kredit yang sudah tersimpan diperiksa dan dilewati. Berhenti pada Review.
+Tes simulasi lulus; perlu dicoba langsung pada SoundOn pengguna.
+
+
+3.9.4: pencarian judul kredit dan kelompok Add menggunakan teks terlihat atau teks langsung pada label; teks anak ikon/tooltip tidak harus sama dengan judul. Gulir otomatis tetap aktif.
+Tutup versi lama, ekstrak versi baru, jalankan run_app.bat, buka draf yang sama lalu Mulai otomatis.
+Tes simulasi dan JavaScript label dengan tooltip lulus. Belum diuji langsung pada SoundOn pengguna. Tetap berhenti di Review.
+
+
+3.10.2: memverifikasi cover pada bagian Generate AI cover, termasuk preview gambar/background/canvas. Cover yang sudah terpasang dilewati.
+Sesudah kredit, cover dan Previously released?, bot menggulir ke Trim online, membuka dialog, mengonfirmasi 0:00–0:15 sesuai pilihan First 15 seconds, menunggu klip selesai, lalu Next. Klip 1 yang sudah ada tidak dibuat ulang.
+Prompt AI tetap kosong. Bot berhenti pada Review.
+Tutup versi lama, ekstrak versi baru, jalankan run_app.bat. Edit > Kredit & Lirik > Klip TikTok: First 15 seconds. Buka draf yang sama, Mulai otomatis.
+Tes simulasi lulus, belum diuji langsung pada SoundOn pengguna.
+
+
+3.10.3: pemeriksaan cover mendukung judul pada semua jenis elemen dan preview background pada span/elemen lain, serta menunggu 30 detik setelah Use this. Tetap memeriksa preview pada bagian cover sebelum melanjutkan.
+Prompt AI kosong. Gulir Trim online dan klip 0:00–0:15 tetap aktif. Berhenti pada Review.
+Tutup versi lama, ekstrak versi baru, jalankan run_app.bat, buka draf yang sama lalu Mulai otomatis.
+Tes JavaScript dan simulasi lulus; belum diuji pada DOM SoundOn pengguna.
+
+
+3.10.4: Confirm otomatis ketika rentang pilihan SoundOn valid dan tombol Confirm aktif. Tidak lagi menunggu 0:00–0:15. Nilai First 15 seconds dari antrean lama sekarang mengikuti rentang SoundOn, sesuai perubahan ini. Mode baru: SoundOn selected segment. Manual tetap berhenti.
+Tutup versi lama, tutup popup Trim online dengan X tanpa menghapus audio, ekstrak versi baru, jalankan run_app.bat. Buka draf yang sama dan Mulai otomatis. Setelah Confirm, bot menunggu klip lalu Next. Prompt AI kosong, berhenti pada Review.
+Tes simulasi termasuk rentang 0:49–1:22.8 lulus. Belum diuji langsung di SoundOn pengguna.
+
+
+3.10.5: pembacaan From/To pada Trim online menyertakan nilai input dan mendukung spasi antar menit, titik dua, detik. Confirm ditekan setelah rentang valid dan tombol aktif.
+Tutup aplikasi lama dan popup Trim online dengan X. Ekstrak versi baru, jalankan run_app.bat, buka draf yang sama lalu Mulai otomatis.
+Prompt AI tetap kosong; bot berhenti pada Review. Tes JavaScript input dan simulasi lulus, belum diuji langsung di SoundOn pengguna.
+
+
+3.10.6: menunggu rentang trim dan Confirm hingga 2 menit. Mendukung nama tombol dengan ikon centang dan teks Confirm di dalam dialog Trim online. Tidak langsung error ketika tombol belum muncul.
+Tutup aplikasi lama dan popup Trim dengan X, ekstrak versi baru, jalankan run_app.bat, buka draf yang sama lalu Mulai otomatis.
+Prompt AI kosong; berhenti pada Review. Tes simulasi tombol muncul terlambat dan ikon centang lulus, belum diuji langsung pada SoundOn pengguna.
+
+
+3.10.7: menunggu spinner semi-spin pada Trim online sebelum Confirm. Jika klik timeout karena intersepsi/loading, tunggu lalu coba lagi maksimal 3 menit; tidak menggunakan force click. Jika dialog sudah tertutup, tidak mengulang klik.
+Tutup aplikasi lama dan popup Trim dengan X, ekstrak versi baru, jalankan run_app.bat, buka draf yang sama lalu Mulai otomatis.
+Prompt AI kosong; tetap berhenti pada Review. Tes simulasi spinner/retry lulus; belum diuji langsung pada SoundOn pengguna.
+
+
+3.10.8: tidak menganggap wadah semi-spin yang tetap terlihat sebagai loading aktif. Bot memeriksa apakah titik klik Confirm tertutup elemen lain; jika bebas, klik dengan pemeriksaan normal Playwright. Tidak force click.
+Tutup aplikasi lama dan popup Trim dengan X, ekstrak versi baru, jalankan run_app.bat, buka draf yang sama lalu Mulai otomatis.
+Prompt AI kosong; bot berhenti pada Review. Tes simulasi titik klik tertutup/terbuka, retry dan penutupan dialog lulus; belum diuji langsung pada SoundOn pengguna.
+
+
+3.10.9: Release date mencari input tanggal secara khusus agar wrapper combobox tidak dihitung sebagai kolom kedua. Pengenalan caption mendukung strong/b dan teks langsung/terlihat, termasuk label dengan bantuan.
+Bot mengisi tanggal dari antrean, memilih Skip for now, lalu Next setelah fungsi pengisian selesai. Tidak mengganti tanggal atau melewati peringatan tanggal terlalu dekat.
+Tutup versi lama, ekstrak, jalankan run_app.bat. Biarkan browser di Release Settings draf yang sama dan Mulai otomatis.
+Tes resolver JavaScript dan regresi simulasi lulus; belum diuji langsung pada SoundOn pengguna. Prompt AI kosong; tetap berhenti pada Review.
+
+
+3.10.10: jeda 10 detik sebelum Next dari Track information setelah alur klip selesai. Jeda juga berlaku setelah perbaikan klip dari dialog validasi. Hentikan tetap membatalkan selama jeda.
+Tutup aplikasi lama, ekstrak versi baru, jalankan run_app.bat, buka draf yang sama lalu Mulai otomatis. Prompt AI kosong; berhenti pada Review.
+Tes jeda dan pembatalan lulus; belum diuji langsung pada SoundOn pengguna.
+
+
+3.10.11: tunggu Upload complete khusus pada baris Clip 1, termasuk klip yang sudah ada. Status Waiting/Uploading di bagian lain tidak menghambat Next. Setelah klip selesai, tunggu 10 detik lalu Next. Tetap berhenti di Review.
+
+
+3.10.12: jeda Next 3 detik. Release date readonly dipilih melalui kalender, navigasi bulan dan verifikasi tanggal setelah pilihan. Tetap berhenti pada Review.
+
+
+3.10.13: konfirmasi Release Date Too Soon dengan No, continue with this date saat memilih tanggal atau setelah Next. Tanggal antrean tetap diverifikasi. Next setelah klip tetap 3 detik. Berhenti di Review.
+
+
+3.10.14: jeda 3 detik sebelum Next pada semua tahap setelah pengisian selesai, termasuk Release Settings dan More release options. Log mencatat tahap klik Next. Tetap berhenti di Review.
+
+
+3.10.15: Skip for now dicari dengan label pilihan stabil pada halaman, tanpa penanda grup yang hilang setelah render ulang. Setelah terverifikasi, jeda 3 detik lalu Next. Berhenti di Review.
+
+
+3.10.16: Skip for now memakai locator teks langsung dan verifikasi input/wrapper, tanpa accessible name radio yang berubah. Setelah selesai jeda 3 detik lalu Next. Berhenti di Review.
+
+
+3.10.17: tombol Buka akun pada antrean menuju https://www.soundon.global/library/publish/single dan memulai otomatis setelah Chrome/formulir siap. Jika draft_url ada, melanjutkan draf tersebut. Login tetap dilakukan pengguna. Hentikan membatalkan penantian. Tetap berhenti di Review. Tambahkan antrean baru untuk lagu baru.
+
+
+3.10.18: Tambah lagu menyalin data dari lagu terpilih, atau lagu terakhir jika tidak ada pilihan. Hanya title dan audio dikosongkan. Identitas antrean dan URL draf tidak disalin agar menjadi lagu baru. Edit tetap mengubah lagu lama.
+
+
+3.10.19: template Tambah lagu mengosongkan judul, file audio, dan file cover art. Sumber cover AI SoundOn serta gaya cover tetap mengikuti template.
+
+
+3.11.0: Studio unggah dengan latar terang, header navy, tabel lega, status berwarna, scrollbar tabel dan aktivitas, formulir konsisten. Tombol utama Tambah lagu, Edit, Mulai unggah, Hentikan. Menu Lainnya menampung lanjut halaman aktif, peninjauan manual, hapus antrean. Isi halaman aktif tidak ditampilkan; UPC/ISRC lama disembunyikan namun nilainya tetap tersimpan. Template dan berhenti Review tetap aktif.
+
+
+3.11.1: setelah Review, otomatis lanjut ke lagu Menunggu berikutnya sesuai urutan. Setiap lagu tetap berhenti sebelum Submit, URL draf tersimpan. Jika gagal atau dihentikan, tidak lanjut. Opsi Lanjut ke lagu berikutnya aktif secara default. Ikon tombol dan status ditambahkan.
+
+
+3.11.2: folder utama diringkas; panduan di docs, catatan perbaikan digabung.
+
+
+3.12.0: pembaruan otomatis melalui GitHub Releases. Saat aplikasi dibuka, versi terbaru diperiksa, diunduh, dicocokkan SHA-256, file lama dicadangkan ke SoundOnAccounts\update_backups, lalu aplikasi dibuka ulang. Offline atau gagal: aplikasi tetap dibuka. Semua file aplikasi (termasuk upload_manager.py, soundon_upload_flow.py, artist_finance.py dan docs) kini dapat diperbarui; soundon.license, update_config.json dan data pengguna tidak disentuh. Pengaturan > Periksa Pembaruan: isi repo GitHub dan sakelar otomatis. Alat tools\buat_rilis.py membuat ZIP + manifest. Panduan: docs\PANDUAN_PEMBARUAN_OTOMATIS.txt.
+Pasang versi ini manual satu kali (ekstrak ke folder baru, salin soundon.license lama). Versi berikutnya terpasang otomatis.
+Tes pembaruan, penolakan ZIP tidak aman, SHA-256, cadangan dan anti-pengulangan lulus; belum diuji langsung pada Windows pengguna.
+
+
+3.12.1: perbaikan tampilan menyeluruh. Ikon baru digambar sendiri (tidak lagi bergantung pada simbol font Windows yang tampil sebagai kotak), sidebar dengan logo dan penanda menu aktif, tombol dan avatar bersudut bulat yang rapi, warna tombol konsisten (ungu hanya untuk aksi utama). Dashboard: kartu negara dan inventaris dengan ikon, tabel akun lebih lega dengan status berbentuk label, menu Baca (Streams/Pendengar/Saldo), kolom tren dan waktu disembunyikan otomatis saat jendela sempit, kolom cari dengan petunjuk. Daftar Akun, Analytics, Penghasilan dan Inventaris HP memakai kartu dan judul seragam. Pengaturan dikelompokkan: Pembaruan, Data & Transfer, Kategori, Lokasi Data. Dialog pembaruan, aksi akun, jumlah HP/artis/lagu dan penghasilan artis dirapikan. Studio unggah kini bertema gelap seperti aplikasi, dengan ringkasan status, tabel berwarna, dan panel Aktivitas yang selalu terlihat. Perbaikan bug: tampilan Kolom Negara di dashboard tidak lagi error.
+Fungsi, data, alur unggah dan berhenti di Review tidak berubah. Terpasang otomatis lewat pembaruan GitHub.
+Tes tampilan semua halaman dan dialog lulus di simulasi; belum dilihat langsung di Windows pengguna.
+
+
+3.12.2: perbaikan fitur dan gulir.
+Gulir: seluruh Dashboard kini satu halaman yang bisa digulir (tabel akun tampil penuh, tidak terjepit di kotak kecil). Gulir roda mouse dan touchpad memakai jarak tetap per klik, halus, dan sama di semua halaman; sebelumnya halaman panjang melompat terlalu jauh dan halaman pendek nyaris tidak bergerak. Daftar di dalam dialog (checklist artis, editor lagu) ikut bisa digulir. Roda mouse di atas pilihan (combobox) tidak lagi mengganti filter secara tidak sengaja. Posisi gulir tidak lagi melompat ke atas setelah Sinkron, Baca Saldo, atau Refresh.
+Perbaikan: (1) Simpan pada dialog Data tidak lagi mengalikan saldo (mis. 4160229,0 menjadi 41602290 atau $897.78 menjadi $89778); saldo hanya dianggap diperbarui jika memang diubah. (2) Status Chrome dan jumlah Chrome aktif kini diperiksa otomatis setiap 20 detik, setelah membuka akun, dan saat Refresh. (3) Halaman Penghasilan, Daftar Akun, Analytics dan lainnya tidak lagi menampilkan data lama setelah ada perubahan. (4) Impor CSV: saldo kosong tidak menimpa saldo menjadi 0; jumlah artis/lagu ikut diimpor; angka dengan titik ribuan diterima. (5) Impor paket akun: ID yang bentrok dengan profil Chrome yang sudah ada diberi ID baru agar akun tidak memakai login akun lain. (6) Analytics: Streams/Pendengar per akun mengikuti tanggal Analytics yang dipilih. (7) Catatan periode yang sama diganti, bukan ditumpuk, sehingga file data tidak terus membesar. (8) Baca Streams/Pendengar menyimpan platform yang dipilih saat tombol ditekan. (9) Tambah kategori tidak lagi mengganti filter Dashboard. (10) Studio unggah: Mulai unggah tanpa pilihan otomatis memulai lagu Menunggu pertama; Edit/Hapus/Lanjutkan tanpa pilihan memberi petunjuk.
+Alur unggah dan berhenti di Review tidak berubah. Tes otomatis dan uji tampilan lulus di simulasi; belum diuji langsung di Windows pengguna.
+
+
+3.12.3: Dashboard kembali ke tata letak 3.12.1 (ringkasan di atas, tabel akun dengan area gulir sendiri). Perbaikan gulir dan perpindahan halaman:
+- Tabel akun kini digambar langsung (bukan ratusan tombol/widget kecil), sehingga gulir mulus, tidak berbayang/rusak, dan judul kolom tetap terlihat saat digulir.
+- Gulir tidak lagi beranimasi; setiap putaran roda langsung bergeser dengan jarak tetap, sehingga layar tidak digambar ulang berkali-kali.
+- Pindah halaman menyembunyikan Dashboard sepenuhnya (bukan ditimpa), sehingga tidak ada sisa angka/kartu Dashboard di halaman lain.
+- Proses latar belakang (status Chrome, baca data, cek pembaruan) tidak lagi menyentuh tampilan dari thread lain; ini penyebab crash/macet acak.
+- Halaman hanya dibangun ulang bila data atau filter berubah; pemeriksaan status Chrome tidak lagi membangun ulang halaman yang sedang dibuka.
+Fitur, data, dan alur unggah tidak berubah.
+
+
+3.13.0: tanggal baru, hapus akun, mode terang/gelap, dan perbaikan crash saat ganti menu.
+- Tanggal: satu pemilih periode untuk Dashboard dan Analytics. Klik tombol periode untuk pilihan cepat (Hari ini, Kemarin, 7/30 hari terakhir, Bulan ini, Bulan lalu, Tahun ini) atau pilih rentang di kalender (klik tanggal awal lalu tanggal akhir, Terapkan). Bulan penghasilan artis dipilih lewat kisi 12 bulan. Ganti periode atau platform langsung memperbarui data, tanpa tombol Terapkan.
+- Dashboard: centang akun (atau centang semua di judul kolom) lalu "Hapus akun terpilih"; atau klik ikon tempat sampah di baris akun. Ada konfirmasi berisi daftar akun; profil Chrome ikut dihapus. Akun yang Chrome-nya masih terbuka dilewati dan diberi tahu.
+- Panel ringkasan kedua kini tetap Amerika Serikat (tanpa pilihan negara).
+- Dihapus: Impor/Ekspor CSV, grafik mini Total Streams, pemilih tanggal lama, dan kode lama yang tidak dipakai.
+- Mode terang dan gelap: tombol di bawah sidebar atau Pengaturan > Tampilan. Aplikasi dibuka ulang otomatis untuk menerapkannya; pilihan tersimpan.
+- Crash saat ganti menu: halaman yang tidak dibuka kini dihapus dari memori (sebelumnya semua halaman tetap hidup sehingga jumlah elemen tampilan menumpuk hingga batas Windows), kartu dibuat lebih ringan, dan daftar panjang dibangun bertahap agar jendela tidak "Not Responding".
+Alur unggah dan berhenti di Review tidak berubah.
+
+
+3.14.0: Sinkron Otomatis Streams & Pendengar.
+- Sekali sehari (default pukul 08:00, atau saat aplikasi dibuka setelah jam itu) aplikasi membaca Streams & Pendengar semua akun dari Analytics SoundOn, memakai periode dan platform yang dipilih di Dashboard. Bisa juga dijalankan kapan saja: Dashboard > Sinkron > Sinkron semua akun sekarang.
+- Chrome akun yang tertutup dibuka diperkecil, dibaca, lalu ditutup lagi. Chrome yang sedang Anda pakai tetap terbuka (hanya tab yang dibuka sinkron yang ditutup).
+- Halaman dibuka langsung dengan tanggal yang tepat (startTime/endTime) dan platform (store; saat ini Semua Platform dan Spotify). Rentang yang tampil di SoundOn diperiksa dulu; bila tidak sesuai, data tidak disimpan. Bila SoundOn baru punya data sampai 2 hari lalu, laporan mencatat "data SoundOn s.d. ...".
+- Angka Streams diambil persis dari grafik harian bila tersedia (bukan pembulatan seperti 23.6K); bila tidak, dipakai angka kartu dan ditandai ≈.
+- Akun yang belum login dilewati dan dicatat. Akun yang sedang dipakai Studio unggah dilewati.
+- Progres tampil di bawah judul Dashboard. Laporan lengkap: Pengaturan > Sinkron Otomatis > Lihat laporan (file SoundOnAccounts\sync_log.txt). Jam, aktif/nonaktif, dan buka-Chrome-tertutup bisa diatur di Pengaturan.
+Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
+
+
+3.15.0: Sinkron otomatis kini juga membaca Saldo dan Asal Streams, serta berbasis bulan.
+- Saldo: setelah Streams, sinkron membuka My Earnings dan membaca saldo tersedia (IDR/USD) seperti tombol Baca Saldo.
+- Asal Streams: sinkron membuka tab Artists di Analytics, lalu View Insights tiap artis (maks. 12 per akun), memastikan tanggalnya sama, dan menyimpan persentase Indonesia / Amerika Serikat per artis. Hasil tampil di menu Analytics untuk periode yang sama.
+- Bulanan: sinkron harian membaca Bulan ini; pada tanggal 1–3 juga Bulan lalu agar total bulan lalu lengkap. Menu Sinkron > "Sinkron per bulan…" untuk membaca bulan tertentu. Pemilih tanggal punya kolom PER BULAN (12 bulan terakhir) untuk melihat data satu bulan penuh dengan sekali klik.
+- Pengaturan > Sinkron Otomatis: pilihan baca Saldo dan Asal Streams bisa dimatikan.
+
+
+3.15.1: Baca Saldo (manual maupun sinkron otomatis) kini mengklik ikon mata bila saldo di "Penghasilan Saya" masih tersembunyi (****), lalu membaca angkanya. Kartu "Akun IDR / Akun USD" dikenali walau angkanya tanpa simbol mata uang; kartu "Pendapatan Anda pada 2026" tidak dipakai sebagai saldo.
+
+
+3.15.2: Jeda membaca Asal Streams artis yang kosong dipercepat.
+- Artis yang kolom Streams-nya 0 di tab Artists dilewati langsung tanpa membuka Wawasan Artis.
+- Bila halaman Wawasan Artis menampilkan Streams 0 dan grafik "Streams berdasarkan wilayah" kosong, artis itu dilewati dalam ±2 detik (sebelumnya menunggu ±20 detik lebih dan dicatat "gagal"). Laporan kini mencatatnya sebagai "kosong", bukan "gagal".
+- Tanggal langsung disertakan saat membuka Wawasan Artis, dan tab Artists tidak dibuka ulang untuk setiap artis, sehingga tiap artis lebih cepat dibaca.
+- Batas tunggu grafik untuk artis yang punya Streams: 15 detik.
+
+
+3.15.3: Akun yang Analytics-nya kosong tidak ditunggu lama lagi.
+- Bila Streams akun pada periode itu 0, sinkron tidak membuka tab Artists / Wawasan Artis sama sekali (laporan: "asal Streams: 0 Streams, dilewati") dan langsung lanjut ke saldo.
+- Bila tab Artists menampilkan "No data", sinkron berhenti menunggu setelah ±1 detik (sebelumnya menunggu 15 detik).
+
+
+3.16.0: Pembaruan otomatis juga saat aplikasi sedang terbuka.
+- Selain saat dibuka, aplikasi memeriksa GitHub tiap 20 menit. Versi baru diunduh dan diperiksa (SHA-256) di latar belakang tanpa mengganggu pekerjaan.
+- Setelah siap, muncul jendela "Versi baru tersedia" dengan hitung mundur 30 detik, lalu aplikasi ditutup, dicadangkan, diperbarui, dan dibuka kembali otomatis. Tombol "Nanti (1 jam)" untuk menunda.
+- Tidak pernah memasang saat Sinkron atau Studio unggah sedang berjalan; menunggu sampai selesai.
+- Pembaruan yang gagal dipasang 2 kali tidak dicoba terus-menerus (pasang manual dari Pengaturan).
+- Penerbit otomatis (khusus komputer admin): Pengaturan > Pembaruan > Atur token penerbit. Setelah token GitHub diisi, paket rilis yang masuk ke folder SoundOnRilis\masuk diperiksa (SHA-256, isi ZIP, versi) lalu diterbitkan ke GitHub sebagai rilis Latest — tanpa unggah manual. Hasil: SoundOnRilis\terbit atau SoundOnRilis\gagal, laporan di SoundOnRilis\log_terbit.txt.
+- Alat baris perintah tools/terbitkan_rilis.py untuk menerbitkan isi folder dist/ dengan token yang sama.
+- Catatan rilis (judul di jendela pembaruan) diambil otomatis dari Riwayat_Perbaikan.
+
+
+3.16.1: Rilis diterbitkan otomatis oleh GitHub dan manifest.json selalu bernama benar.
+- Tidak ada perubahan fitur; isi sama dengan 3.16.0.
+- Rilis kini dibuat otomatis oleh GitHub Actions setiap versi dinaikkan, sehingga file manifest.json di rilis Latest selalu bernama tepat dan pembaruan otomatis tidak terhenti.

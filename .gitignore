@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+SoundOn_Account_Manager/dist/
+SoundOn_Account_Manager/soundon.license
+SoundOn_Account_Manager/update_config.json

@@ -1,0 +1,81 @@
+v3.7 — SALDO TERSEDIA SOUNDON
+1. Pada baris artis klik Buka: halaman My Earnings dibuka melalui profil Chrome akun terkait.
+2. Login bila diminta, tunggu saldo tersedia muncul, lalu klik Sinkron.
+3. Saldo hasil pembacaan disimpan pada akun; semua artis yang terkait akun tersebut mengikuti saldo yang sama.
+4. IDR/USD ditampilkan sesuai akun, tanpa konversi kurs. Total pemilik menghitung setiap akun terkait sekali dan memisahkan mata uang.
+5. Saldo adalah angka terakhir yang dibaca, bukan data realtime. Waktu sinkron ada di menu titik tiga. Auto refresh berkala tetap mati.
+6. Penghasilan manual per bulan tetap tersimpan; edit melalui menu titik tiga > Atur Artis & Penghasilan Manual.
+7. Pembaca mencari kartu berlabel Saldo tersedia / Available balance. Jika kartu tidak ditemukan, data lama tidak ditimpa. Kirim screenshot My Earnings untuk menyesuaikan pembaca.
+8. Sinkron langsung pada akun SoundOn belum diuji di lingkungan ini; perlu Chrome terhubung dan Playwright dari dependensi aplikasi.
+9. Jika satu akun memiliki artis dengan pemilik berbeda, saldo tetap saldo bersama akun, bukan pembagian hak penghasilan antar pemilik.
+
+v3.6.4 — REVISI & HAPUS PEMILIK / ARTIS
+- Pada judul kartu pemilik: Ubah Nama untuk membetulkan nama; Hapus untuk menghapus pemilik.
+- Hapus pemilik mengembalikan artisnya ke Belum ditentukan dan mempertahankan riwayat penghasilan.
+- Menu titik tiga di baris artis: Ubah Nama Artis, Lepaskan dari Pemilik, Hapus Artis Permanen, Kelola Akun SoundOn.
+- Salah pilih artis: gunakan Lepaskan dari Pemilik, kemudian pilih ulang melalui checklist pemilik yang benar.
+- Hapus Artis Permanen menghapus rincian artis dan seluruh riwayat penghasilannya setelah konfirmasi. Akun SoundOn tidak dihapus dan dapat tampil lagi sebagai akun belum didata.
+- Sebelum perubahan, aplikasi membuat salinan cadangan accounts.json dan owners.json.
+- Tampilan ringkas dua kolom dan refresh manual tetap berlaku.
+
+v3.6.3 — DAFTAR ARTIS RINGKAS
+- Nama artis, penghasilan, Atur, Buka, dan menu titik tiga tampil sejajar.
+- Atur langsung memilih artis yang diklik di editor penghasilan.
+- Menu titik tiga tetap membuka pengelolaan akun terkait.
+- Total penghasilan pemilik ditampilkan dalam satu baris.
+- Kartu pemilik tetap dua kolom pada jendela lebar. Nama panjang membungkus jika perlu.
+- Checklist artis dan refresh manual tetap berlaku.
+
+v3.6.2 — CHECKLIST ARTIS & REFRESH MANUAL
+- Klik Tambah Artis pada kartu pemilik, centang beberapa artis, lalu Simpan Pilihan.
+- Artis yang sudah memiliki pemilik tidak muncul pada checklist pemilik lain.
+- Pencarian checklist mempertahankan centang saat kata pencarian berubah.
+- Akun tanpa rincian artis diberi tanda nama dari akun; memilihnya membuat rincian artis dengan nama akun tersebut. Nama dapat diedit kemudian.
+- Penghasilan tidak dibuat otomatis saat memilih artis. Isi melalui Atur Artis & Pemilik.
+- Refresh otomatis berkala dinonaktifkan. Gunakan tombol Refresh; tindakan simpan dan ganti filter tetap memperbarui tampilan.
+- Susunan kartu dua kolom tetap dipertahankan pada jendela lebar.
+
+v3.6.1 — TAMBAH PEMILIK
+- Tombol Tambah Pemilik berada di bagian atas, di sebelah Tambah Akun.
+- Isi nama pemilik lalu konfirmasi; kartu pemilik langsung muncul walau belum memiliki artis.
+- Klik Tambah Artis pada kartu pemilik, pilih akun SoundOn, lalu isi nama artis dan nominal penghasilan.
+- Nama pemilik langsung terisi dan juga tersedia pada pilihan pemilik di editor.
+- Dua kartu pemilik tampil berdampingan saat area daftar cukup lebar; gunakan jendela maksimal.
+- Pemilik tersimpan di %USERPROFILE%\SoundOnAccounts\owners.json dan ikut cadangan/transfer akun.
+
+v3.6 — TAMPILAN PER PEMILIK
+- Daftar Akun terbuka dengan tampilan Per Pemilik, dua kolom pada jendela lebar.
+- Nama pemilik menjadi judul kartu. Artis dari beberapa akun yang memiliki pemilik sama digabung.
+- Setiap artis menampilkan penghasilan bulan terpilih; kartu pemilik menampilkan total.
+- Nama pemilik yang hanya berbeda huruf besar/kecil atau spasi disatukan.
+- Isi pemilik melalui Atur Artis & Pemilik lalu Simpan.
+- Akun tanpa rincian artis tampil di Belum ditentukan; nama akun tidak otomatis dianggap nama artis.
+- Pilih Per Akun untuk mengakses tampilan kartu akun beserta pengaturan HP, lagu, dan kredensial.
+
+SOUNDON ACCOUNT MANAGER v3.5 — PEMILIK & PENGHASILAN ARTIS
+
+PEMASANGAN
+1. Tutup aplikasi lama. Ekstrak ZIP ini ke folder baru.
+2. Salin soundon.license milik Anda dari folder aplikasi lama ke folder final baru.
+3. Jalankan run_app.bat. Gunakan Python dan dependensi yang sama dengan aplikasi lama.
+4. Data lama tetap dibaca dari %USERPROFILE%\SoundOnAccounts\accounts.json.
+   Sebelum menyimpan perubahan artis, aplikasi membuat salinan .bak dari accounts.json.
+   Simpan juga cadangan melalui Pengaturan > Cadangkan data akun sebelum pembaruan.
+
+CARA PAKAI
+1. Buka Daftar Akun dan pilih bulan serta tahun penghasilan.
+2. Klik Atur Pemilik & Penghasilan pada kartu akun.
+3. Klik Tambah Artis, isi nama artis, pemilik (misalnya Pak Mirwan), dan nominal.
+4. Isi 5000000 atau 5.000.000 untuk lima juta rupiah, lalu klik Simpan.
+5. Pilih artis pada tabel untuk mengubah pemilik atau penghasilan bulan terpilih.
+6. Ganti bulan di jendela editor untuk mengisi bulan lain. Klik Simpan setiap selesai mengisi.
+7. Hapus Bulan hanya menghapus nominal bulan terpilih. Hapus Artis menghapus artis dan semua riwayatnya; keduanya meminta konfirmasi.
+
+CATATAN
+- Penghasilan diisi manual dalam rupiah bulat; belum ditarik otomatis dari SoundOn.
+- Nama akun dan nama artis adalah data terpisah. Satu akun dapat menampung beberapa artis.
+- Kolom Jumlah Artis lama tetap merupakan angka katalog manual; daftar rincian artis tidak otomatis mengubah angka tersebut.
+- Pemilik adalah pemilik saat ini, berlaku untuk semua bulan. Riwayat pergantian pemilik belum dicatat.
+- Belum diisi berbeda dengan Rp0. Total menjumlahkan nominal yang sudah diisi.
+- Data artis ikut dalam cadangan JSON dan paket transfer akun yang sudah ada.
+- File ini merupakan pembaruan source aplikasi Python, bukan EXE mandiri.
