@@ -189,3 +189,34 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 3.16.1: Rilis diterbitkan otomatis oleh GitHub dan manifest.json selalu bernama benar.
 - Tidak ada perubahan fitur; isi sama dengan 3.16.0.
 - Rilis kini dibuat otomatis oleh GitHub Actions setiap versi dinaikkan, sehingga file manifest.json di rilis Latest selalu bernama tepat dan pembaruan otomatis tidak terhenti.
+
+
+3.17.0: Studio unggah otomatis: folder pantau dan Submit otomatis.
+- Folder pantau: taruh lagu di SoundOnUnggah\masuk\<nama akun>\ (Judul.wav + Judul.jpg). Selama aplikasi terbuka, lagu langsung masuk antrean dan diunggah satu per satu tanpa diklik. Studio dibuka otomatis bila ada lagu baru.
+- Judul diambil dari nama file; data lain dari data.txt di folder akun atau dari lagu terakhir akun itu. Lirik: Judul.lirik.txt. Tanggal rilis: hari ini + 7 hari (bisa diubah di Lainnya > Tanggal rilis otomatis) bila tidak ditulis.
+- File diperiksa sampai selesai disalin. Lagu yang masuk antrean dipindah ke SoundOnUnggah\diproses; yang datanya belum lengkap atau akunnya tidak dikenal dipindah ke SoundOnUnggah\gagal beserta ALASAN.txt.
+- Submit otomatis (pilihan di Studio): setelah Review, bot menekan Submit satu kali dan memastikan SoundOn menerimanya. Tidak menekan Submit bila Review menampilkan peringatan. Dialog konfirmasi biasa dikonfirmasi; dialog yang meminta centang persetujuan atau tidak dikenal menghentikan proses untuk diperiksa.
+- Pengaman rilis ganda: lagu yang Submit-nya sudah ditekan dicatat dan tidak pernah dikirim ulang, walaupun hasilnya tidak terbaca.
+- Lagu yang gagal ditandai "Perlu tindakan" dan antrean lanjut ke lagu berikutnya. Hentikan menjeda antrean otomatis sampai Mulai unggah ditekan.
+- Unggah otomatis memakai tab Chrome sendiri, sehingga tab SoundOn lain yang terbuka tidak mengganggu. Tab ditutup setelah terkirim.
+- Pembaruan aplikasi menunggu sampai antrean otomatis selesai.
+
+
+3.18.0: Tombol Unggah langsung di tiap akun.
+- Di tabel akun ada tombol Unggah: pilih file lagu (boleh banyak sekaligus), lagu langsung masuk antrean akun itu dan diunggah otomatis satu per satu. Tidak perlu membuat folder atau mengisi data per lagu.
+- Judul diambil dari nama file ("01 - Judul_Lagu.wav" menjadi "Judul Lagu"); artis dari daftar artis akun (dipilih bila lebih dari satu, diingat untuk berikutnya); cover AI SoundOn; lirik otomatis dari file .txt bernama sama bila ada.
+- Pengaturan unggah (sekali untuk semua akun, ditanyakan pada unggahan pertama; ubah di Studio > Lainnya > Pengaturan unggah): genre (bawaan Pop), bahasa judul & lirik (English), jenis lagu (ada vokal), eksplisit, tanggal rilis (+7 hari), penulis/penyanyi/produser = nama artis, dan Submit otomatis.
+- Juga tersedia di menu ⋯ akun: "Unggah lagu ke akun ini".
+- Kolom Diperbarui disembunyikan otomatis pada layar sempit agar tombol tidak terpotong.
+
+
+3.18.1: Pilihan Eksplisit di SoundOn berbahasa Indonesia dikenali.
+- Non-Explicit kini cocok dengan "Noneksplisit", Explicit dengan "Eksplisit", Clean dengan "Bersih".
+- Peran kredit juga dikenali dalam bahasa Indonesia (Vocalist = Vokalis, Producer = Produser), termasuk saat memeriksa kredit yang sudah tersimpan.
+
+
+3.18.2: Monetisasi (Commercial Music Licensing & CapCut) kini diaktifkan, tidak dimatikan.
+- Bawaan baru: CML dan CapCut On untuk tombol Unggah dan folder pantau. Bisa dimatikan di Pengaturan unggah ("Monetisasi aktif").
+- Lagu dari tombol Unggah yang masih di antrean dan belum terkirim ikut memakai pilihan monetisasi terbaru.
+- YouTube Content ID (Add-on berbayar) tetap tidak diaktifkan otomatis.
+- Bila SoundOn membuka dialog setelah switch monetisasi dinyalakan, bot berhenti dan menampilkan isi dialog agar bisa dipetakan.

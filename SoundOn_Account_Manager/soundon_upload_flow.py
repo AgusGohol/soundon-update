@@ -1,4 +1,7 @@
-"""Screenshot-grounded bilingual SoundOn flow. No final submission operation."""
+"""Screenshot-grounded bilingual SoundOn flow.
+
+run() berhenti di Review. submit() (hanya bila pengguna mengaktifkan "Submit otomatis")
+menekan Submit rilis satu kali, dengan pemeriksaan ketat sebelum dan sesudahnya."""
 import re
 import time
 from pathlib import Path
@@ -59,7 +62,14 @@ VALUES = {
     'Skip for now': ('Lewati untuk saat ini', 'Lewati untuk sekarang', 'Lewati dulu'),
     'No, I want to distribute a new release': ('Tidak, saya ingin mendistribusikan rilis baru', 'Tidak, saya ingin mendistribusikan rilisan baru'),
     'English': ('Inggris', 'Bahasa Inggris'),
-    'Non-Explicit': ('Tidak eksplisit', 'Non-Eksplisit'),
+    'Non-Explicit': ('Noneksplisit', 'Non-eksplisit', 'Non eksplisit', 'Tidak eksplisit', 'Non-Eksplisit', 'Nonexplicit'),
+    'Explicit': ('Eksplisit',),
+    'Clean': ('Bersih',),
+    'Vocalist': ('Vokalis', 'Penyanyi'),
+    'Producer': ('Produser',),
+    'Composer': ('Komposer',),
+    'Lyricist': ('Penulis lirik',),
+    'Songwriter': ('Penulis lagu',),
     'Indonesian': ('Indonesia','Bahasa Indonesia','Bahasa Indonesia (Bahasa)'),
 }
 
@@ -515,8 +525,11 @@ class Flow:
         existing=any(names.nth(i).is_visible() for i in range(names.count()))
         if existing:
             if role:
-                roles=group.get_by_text(role,exact=True)
-                if not any(roles.nth(i).is_visible() for i in range(roles.count())):
+                shown=False
+                for text in values(role):
+                    roles=group.get_by_text(text,exact=True)
+                    if any(roles.nth(i).is_visible() for i in range(roles.count())):shown=True;break
+                if not shown:
                     raise NeedsAttention(caption+': nama sudah ada dengan peran berbeda. Periksa kredit yang sudah tersimpan.')
             self.log('Kredit sudah ada: '+caption+' → '+name);return
         pattern=re.compile(r'^\+?\s*(?:Add|Tambah|Tambahkan)$',re.I)
@@ -870,9 +883,21 @@ class Flow:
         self.radio('Does this track have an existing publishing administrator or publisher?',j['publisher'])
         self.radio('Have you registered this track with a PRO/CMO?',j['pro'])
         if j['publisher']=='Yes' or j['pro']=='Yes':raise NeedsAttention('Data penerbit/PRO memerlukan formulir tambahan. Lengkapi di browser.')
-        self.toggle('Commercial Music Licensing',j['cml'])
-        self.toggle('CapCut',j['capcut'])
+        # Monetisasi: CML & CapCut mengikuti pilihan (bawaan On). YouTube Content ID adalah Add-on
+        # berbayar, jadi tidak pernah diaktifkan otomatis.
+        for caption,key in (('Commercial Music Licensing','cml'),('CapCut','capcut')):
+            self.toggle(caption,j.get(key) or 'On')
+            self.after_toggle(caption)
         self.toggle('YouTube Content ID','Off')
+
+    def after_toggle(self,caption):
+        # Bila SoundOn membuka dialog setelah switch (mis. syarat), jangan menebak: berhenti dan laporkan.
+        self.cancelled.wait(0.8)
+        dialogs=self.page.get_by_role('dialog')
+        for i in range(dialogs.count()):
+            if dialogs.nth(i).is_visible():
+                text=re.sub(r'\s+',' ',dialogs.nth(i).inner_text())[:220]
+                raise NeedsAttention(caption+': SoundOn membuka dialog ('+text+'). Kirim screenshot dialog ini agar bisa dipetakan.')
 
     def wait_clip_next(self):
         self.check()
@@ -931,6 +956,108 @@ class Flow:
             else:raise NeedsAttention('Tahap halaman tidak dikenali.')
             self.next(stage)
         raise NeedsAttention('Batas tahap tercapai. Periksa browser.')
+
+
+SUBMIT_DONE = re.compile(r'(submitted successfully|successfully submitted|submission (?:was )?successful|submit(?:ted)? success'
+                         r'|release (?:has been )?submitted|under review|in review|pending review|berhasil (?:dikirim|diajukan|disubmit)'
+                         r'|pengajuan berhasil|terkirim|sedang ditinjau|menunggu (?:peninjauan|tinjauan|review))', re.I)
+SUBMIT_WAIT = 120          # detik menunggu tanda terkirim setelah Submit
+SUBMIT_CONFIRM = ('Confirm', 'Konfirmasi', 'Submit', 'Kirim', 'Kirimkan', 'Ajukan', 'OK', 'Oke', 'Yes', 'Ya', 'Continue', 'Lanjutkan')
+
+
+def _visible_dialogs(page):
+    dialogs = page.get_by_role('dialog')
+    return [dialogs.nth(i) for i in range(dialogs.count()) if dialogs.nth(i).is_visible()]
+
+
+def _done_texts(page):
+    try:
+        done = page.get_by_text(SUBMIT_DONE)
+        return {re.sub(r'\s+', ' ', done.nth(i).inner_text()).strip()
+                for i in range(min(done.count(), 20)) if done.nth(i).is_visible()}
+    except Exception:
+        return set()
+
+
+def submit_release(flow, mark):
+    """Tekan Submit rilis SATU kali di halaman Review lalu pastikan SoundOn menerimanya.
+
+    mark() dipanggil tepat sebelum klik agar antrean mencatat "Submit ditekan" — lagu itu tidak
+    akan pernah dikirim ulang otomatis walaupun hasilnya tidak terbaca (mencegah rilis ganda).
+    Dialog yang meminta centang persetujuan atau tidak dikenali menghentikan proses.
+    """
+    page, log = flow.page, flow.log
+    if flow.stage() != 'review':
+        raise NeedsAttention('Review belum terbuka; Submit tidak ditekan.')
+    if _visible_dialogs(page):
+        raise NeedsAttention('Ada dialog terbuka di Review; Submit tidak ditekan. Periksa browser.')
+    errors = page.locator('[role=alert], [aria-invalid=true]')
+    if any(errors.nth(i).is_visible() for i in range(errors.count())):
+        raise NeedsAttention('Review menampilkan peringatan/kolom merah; Submit tidak ditekan.')
+    button = flow.named(page, 'button', 'Submit')
+    deadline = time.monotonic() + 60
+    while not button.is_enabled():
+        flow.check()
+        if time.monotonic() > deadline:
+            raise NeedsAttention('Tombol Submit belum aktif setelah 60 detik; periksa Review.')
+        flow.cancelled.wait(0.5)
+    flow.check()
+    start_url = page.url
+    # Teks "terkirim/under review" yang SUDAH tampil di Review (mis. keterangan) bukan tanda berhasil.
+    baseline = _done_texts(page)
+    mark()
+    button.click(timeout=10000)
+    log('Submit ditekan.')
+    confirmed = False
+    deadline = time.monotonic() + SUBMIT_WAIT
+    while time.monotonic() < deadline:
+        host = (urlparse(page.url).hostname or '').lower()
+        if host not in {'soundon.global', 'www.soundon.global', 'us.soundon.global'}:
+            raise NeedsAttention('Setelah Submit halaman keluar dari SoundOn. Cek Library SoundOn.')
+        dialogs = _visible_dialogs(page)
+        if dialogs:
+            text = ' '.join(d.inner_text() for d in dialogs)
+            if SUBMIT_DONE.search(text):
+                log('SoundOn: ' + re.sub(r'\s+', ' ', text)[:160])
+                return 'Terkirim'
+            dialog = dialogs[-1]
+            boxes = dialog.locator('input[type=checkbox], [role=checkbox]')
+            if any(boxes.nth(i).is_visible() for i in range(boxes.count())):
+                raise NeedsAttention('Setelah Submit, SoundOn meminta persetujuan (centang): '
+                                     + re.sub(r'\s+', ' ', text)[:220] + '. Selesaikan di browser.')
+            if confirmed:
+                raise NeedsAttention('SoundOn menampilkan dialog lagi setelah konfirmasi: ' + re.sub(r'\s+', ' ', text)[:220])
+            buttons = []
+            for word in SUBMIT_CONFIRM:
+                loc = dialog.get_by_role('button', name=re.compile(r'^\s*' + re.escape(word) + r'\s*$', re.I))
+                buttons += [loc.nth(i) for i in range(loc.count()) if loc.nth(i).is_visible()]
+            if len(buttons) != 1:
+                raise NeedsAttention('Dialog setelah Submit belum dikenali: ' + re.sub(r'\s+', ' ', text)[:220]
+                                     + '. Kirim screenshot agar bisa dipetakan.')
+            name = buttons[0].inner_text().strip()
+            buttons[0].click(timeout=10000)
+            confirmed = True
+            log('Konfirmasi Submit: ' + name)
+            flow.cancelled.wait(1)
+            continue
+        fresh = _done_texts(page) - baseline
+        if fresh:
+            log('SoundOn: ' + sorted(fresh)[0][:160])
+            return 'Terkirim'
+        if page.url != start_url:
+            try:
+                still_review = flow.stage() == 'review'
+            except NeedsAttention:
+                still_review = False
+            if not still_review:
+                log('Halaman berpindah dari Review: ' + page.url)
+                return 'Terkirim'
+        errors = page.locator('[role=alert], [aria-invalid=true]')
+        if any(errors.nth(i).is_visible() for i in range(errors.count())):
+            raise NeedsAttention('SoundOn menolak Submit (peringatan tampil). Periksa Review di browser.')
+        flow.cancelled.wait(0.5)
+    raise NeedsAttention('Submit sudah ditekan tetapi hasilnya belum terlihat. Cek Library SoundOn — '
+                         'jangan unggah ulang agar tidak dobel.')
 
 
 def validate_automatic(job):

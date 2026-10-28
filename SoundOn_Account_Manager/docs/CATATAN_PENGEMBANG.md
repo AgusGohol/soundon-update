@@ -4,7 +4,9 @@ Untuk Claude (atau pengembang lain) yang melanjutkan aplikasi ini di sesi baru.
 
 ## Sumber kode
 - Kode terbaru = folder `SoundOn_Account_Manager/` di repo `AgusGohol/soundon-update`
-  (sejak 3.16.1). Sebelumnya hanya ada di ZIP rilis:
+  (sejak 3.16.1). PENTING: sebelum mengubah apa pun, bandingkan APP_VERSION di repo dengan versi
+  rilis Latest. Rilis bisa juga diterbitkan dari luar repo (unggah manual / Penerbit otomatis);
+  bila rilis lebih baru, ambil kode dari ZIP rilis itu, commit ke repo, baru lanjut. ZIP rilis:
   `https://github.com/AgusGohol/soundon-update/releases/latest/download/manifest.json`
   → `zip_name` → `https://github.com/AgusGohol/soundon-update/releases/download/<tag>/<zip_name>`
 - Aplikasi Python/Tkinter + Playwright, Windows.
@@ -30,7 +32,10 @@ Untuk Claude (atau pengembang lain) yang melanjutkan aplikasi ini di sesi baru.
 - Updater tidak pernah menimpa `soundon.license`, `update_config.json`, atau folder data
   `~/SoundOnAccounts` (akun, profil Chrome, laporan). Jangan masukkan file itu ke ZIP.
 - Isi ZIP hanya *.py, *.bat, *.txt, *.csv, *.json, *.md di akar, `docs/`, atau `tools/`.
-- Bot unggah berhenti di halaman Review dan TIDAK PERNAH menekan Submit.
+- Bot unggah berhenti di Review, KECUALI pengguna mencentang "Submit otomatis" di Studio (sejak 3.17.0).
+  Submit rilis hanya ditekan lewat `submit_release()` di `soundon_upload_flow.py`: satu kali per lagu,
+  `submit_clicked` dicatat sebelum klik, lagu yang sudah ditekan tidak pernah dikirim ulang, dialog
+  persetujuan (centang) / tak dikenal menghentikan proses.
 - Sinkron hanya membaca halaman SoundOn yang tampil (tanpa API privat, tanpa mengubah apa pun).
 - Thread latar tidak menyentuh Tk langsung — pakai `ui_call(fn)`.
 - Hanya halaman aktif yang hidup (batas handle Windows); halaman lain dihancurkan saat pindah menu.
@@ -41,4 +46,4 @@ Untuk Claude (atau pengembang lain) yang melanjutkan aplikasi ini di sesi baru.
 - `auto_sync.py` — sinkron Streams/Pendengar/Saldo/Asal Streams lewat Chrome (CDP, port 20000+id).
 - `updater.py` — pembaruan dari GitHub Releases (SHA-256, cadangan, exit code 75).
 - `release_publisher.py`, `tools/buat_rilis.py`, `tools/terbitkan_rilis.py` — rilis.
-- `upload_manager.py` — Studio unggah. `account_table.py`, `date_picker.py`, `ui_theme.py` — UI.
+- `upload_manager.py` — Studio unggah; `upload_quick.py` — tombol Unggah per akun + Pengaturan unggah (ui_settings `upload_defaults`); `upload_folder.py` — folder pantau (~/SoundOnUnggah, opsional). `account_table.py`, `date_picker.py`, `ui_theme.py` — UI.

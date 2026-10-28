@@ -13,12 +13,12 @@ from ui_theme import (rounded_points, RED, INK, TINT, THEME, PANEL, CARD, CARD_H
                       mix, rounded_rect, draw_icon, text_width)
 
 # (judul, lebar minimum, bobot, kunci)
-COLUMNS = [('', 40, 0, 'sel'), ('AKUN', 210, 1, 'name'), ('STATUS', 100, 0, 'status'),
+COLUMNS = [('', 40, 0, 'sel'), ('AKUN', 190, 1, 'name'), ('STATUS', 100, 0, 'status'),
            ('STREAMS', 100, 0, 'streams'), ('PENDENGAR', 100, 0, 'listeners'), ('HP', 46, 0, 'hp'),
            ('ARTIS', 56, 0, 'artists'), ('LAGU', 52, 0, 'songs'), ('SALDO TERSEDIA', 160, 0, 'balance'),
-           ('DIPERBARUI', 104, 0, 'updated'), ('', 290, 0, 'actions')]
+           ('DIPERBARUI', 104, 0, 'updated'), ('', 385, 0, 'actions')]
 COMPACT_HIDE = {'updated'}
-COMPACT_WIDTH = 1160
+COMPACT_WIDTH = 1360
 ROW_H = 50
 HEAD_H = 36
 
@@ -192,7 +192,8 @@ class AccountTable(tk.Frame):
             text('updated', r.get('updated', '—'), DIM, (FONT, 9))
         # tombol aksi (rata kanan)
         x, w, _ = xs['actions']
-        buttons = [('open', 'Buka', None, 'primary'), ('read', 'Baca  ▾', 'sync', 'secondary'),
+        buttons = [('open', 'Buka', None, 'primary'), ('upload', 'Unggah', 'music', 'secondary'),
+                   ('read', 'Baca  ▾', 'sync', 'secondary'),
                    ('data', 'Data', None, 'secondary'), ('more', '', 'more', 'secondary'),
                    ('delete', '', 'trash', 'danger')]
         bh = 30

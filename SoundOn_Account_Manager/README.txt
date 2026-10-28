@@ -1,4 +1,4 @@
-SoundOn Account Manager 3.16.1
+SoundOn Account Manager 3.18.2
 
 Mulai: klik run_app.bat.
 Instal kebutuhan pertama kali: install_dependencies.bat.
@@ -9,4 +9,6 @@ Pembaruan otomatis: atur sekali di Pengaturan > Periksa Pembaruan
 memperbarui dirinya sendiri setiap kali dibuka.
 
 Data akun dan antrean tetap di folder SoundOnAccounts milik pengguna.
-Bot berhenti di Review, tidak menekan Submit.
+Bot berhenti di Review, kecuali "Submit otomatis" diaktifkan di Studio unggah.
+Unggah lagu: klik tombol Unggah di baris akun, pilih file lagu, selesai.
+Data yang sama untuk semua akun diatur sekali di Studio > Lainnya > Pengaturan unggah.

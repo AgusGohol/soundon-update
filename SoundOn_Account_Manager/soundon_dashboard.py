@@ -41,7 +41,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, FONT_SEMI, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.16.1'
+APP_VERSION='3.18.2'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -842,7 +842,62 @@ _update_state={'checking':False,'last_check':time.time(),'ready':None,'snooze_un
 def _app_busy():
     if _sync_state['running']:return True
     um=globals().get('upload_manager_window')
-    return bool(um is not None and getattr(um,'busy',False))
+    try:
+        if um is not None and um.window.winfo_exists() and (um.busy or um.has_pending_auto()):return True
+    except Exception:
+        pass
+    return False
+
+def _quick_pending(sources=('folder','cepat')):
+    try:
+        with open(os.path.join(BASE,'upload_queue.json'),encoding='utf-8') as f:
+            return any(j.get('source') in sources and j.get('status')=='Menunggu' and not j.get('submit_clicked') for j in json.load(f))
+    except (OSError,ValueError):
+        return False
+
+def quick_upload(a):
+    """Tombol Unggah di baris akun: pilih file lagu -> langsung diunggah ke akun ini."""
+    import upload_quick
+    def go():
+        artist=upload_quick.choose_artist(root,a)
+        if not artist:return
+        files=upload_quick.pick_files(root,a)
+        if not files:return
+        if a.get('upload_artist')!=artist:
+            a['upload_artist']=artist
+            try:persist()
+            except OSError:pass
+        d=upload_quick.load_defaults()
+        jobs=[upload_quick.build_job(a,artist,f,d) for f in files]
+        launch_upload_manager()
+        um=globals().get('upload_manager_window')
+        if um is None or not um.window.winfo_exists():return
+        n=um.add_quick_jobs(jobs,a.get('name',''))
+        status_var.set('%d lagu untuk %s masuk antrean unggah.'%(n,a.get('name','')))
+    if not upload_quick.defaults_confirmed():
+        upload_quick.edit_defaults(root,on_saved=go,first_time=True)
+    else:
+        go()
+
+def _upload_watch_tick():
+    """Folder pantau: buka Studio otomatis bila ada lagu baru atau antrean otomatis yang menunggu."""
+    try:
+        if UI.load_settings().get('upload_watch') or _quick_pending(('cepat',)):
+            um=globals().get('upload_manager_window')
+            open_now=um is not None and um.window.winfo_exists()
+            if not open_now:
+                import upload_folder
+                pending=any(p.suffix.lower() in upload_folder.AUDIO_EXT for d in upload_folder.INBOX.glob('*') if d.is_dir() for p in d.iterdir()) \
+                    if upload_folder.INBOX.exists() else False
+                if not pending:
+                    pending=_quick_pending()
+                if pending:
+                    launch_upload_manager()
+                    status_var.set('Folder pantau: lagu baru ditemukan, Studio unggah dibuka otomatis.')
+    except Exception:
+        pass
+    finally:
+        root.after(30000,_upload_watch_tick)
 
 def _update_check_worker():
     import updater as upd
@@ -1406,7 +1461,8 @@ def show_actions(a):
     ht=tk.Frame(head,bg=PANEL);ht.pack(side='left')
     label(ht,a['name'],13,bold=True).pack(anchor='w')
     label(ht,'Akun #'+str(a['id'])+'  ·  '+account_category(a),9,DIM).pack(anchor='w')
-    items=[('Ubah nama','edit',lambda:rename(a),'secondary'),
+    items=[('Unggah lagu ke akun ini','music',lambda:quick_upload(a),'primary'),
+           ('Ubah nama','edit',lambda:rename(a),'secondary'),
            ('Atur jumlah HP, artis & lagu','grid',lambda:edit_account_counts(a),'secondary'),
            ('Pindahkan kategori / negara','tag',lambda:change_category(a),'secondary'),
            ('Kredensial login','key',lambda:edit_credentials(a),'secondary'),
@@ -2496,7 +2552,7 @@ def _selection_changed(count):
         sel_text.set(f'{count} akun dipilih')
         if not sel_bar.winfo_manager() and account_table.winfo_manager():sel_bar.pack(fill='x',padx=8,pady=(8,0),before=account_table)
     elif sel_bar.winfo_manager():sel_bar.pack_forget()
-account_table=AccountTable(wrap,{'open':lambda r:open_streams(r['account']),'data':lambda r:edit(r['account']),
+account_table=AccountTable(wrap,{'open':lambda r:open_streams(r['account']),'data':lambda r:edit(r['account']),'upload':lambda r:quick_upload(r['account']),
                                  'more':lambda r:show_actions(r['account']),'delete':lambda r:delete_accounts([r['account']])},_row_menu)
 account_table.on_selection=_selection_changed
 account_table.pack(fill='both',expand=True,padx=8,pady=8)
@@ -2545,6 +2601,7 @@ def _chrome_status_loop():
 root.after(1500,_chrome_status_loop)
 root.after(180000,_sync_scheduler)   # cek jadwal sinkron 3 menit setelah aplikasi dibuka, lalu tiap menit
 root.after(60000,_update_watcher)    # cek pembaruan GitHub tiap 20 menit selama aplikasi terbuka
+root.after(15000,_upload_watch_tick)  # folder pantau Studio unggah
 try:
     import release_publisher as _rp_boot
     if _rp_boot.load_token():_rp_boot.ensure_folders()
