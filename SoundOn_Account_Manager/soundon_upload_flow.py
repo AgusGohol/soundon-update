@@ -113,12 +113,14 @@ def unique_visible(locator, caption):
 
 
 class Flow:
-    def __init__(self, page, job, cancelled, log):
+    def __init__(self, page, job, cancelled, log, beat=None):
         self.page, self.job, self.cancelled, self.log = page, job, cancelled, log
+        self.beat = beat  # dipanggil di setiap check(): tanda proses masih bergerak (pengaman macet)
         self.files_done=set()
         self.scope=None
 
     def check(self):
+        if self.beat:self.beat()
         if self.cancelled.is_set():raise NeedsAttention('Dihentikan pengguna. Draf tetap terbuka.')
         host=(urlparse(self.page.url).hostname or '').lower()
         if host not in {'soundon.global','www.soundon.global','us.soundon.global'}:

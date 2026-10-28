@@ -220,3 +220,10 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Lagu dari tombol Unggah yang masih di antrean dan belum terkirim ikut memakai pilihan monetisasi terbaru.
 - YouTube Content ID (Add-on berbayar) tetap tidak diaktifkan otomatis.
 - Bila SoundOn membuka dialog setelah switch monetisasi dinyalakan, bot berhenti dan menampilkan isi dialog agar bisa dipetakan.
+
+
+3.18.3: Unggah otomatis tidak macet lagi tanpa batas.
+- Pengaman macet: bila proses unggah tidak bergerak selama 4 menit (halaman SoundOn atau Chrome tidak merespons), lagu itu ditandai "Perlu tindakan" dengan keterangan "Macet", lalu antrean lanjut ke lagu berikutnya. Draf tetap terbuka di browser untuk diperiksa.
+- Tombol Hentikan kini selalu berhasil: bila Chrome tidak merespons dalam 20 detik, proses dilepas sehingga Studio bisa dipakai dan ditutup lagi.
+- Proses yang sudah dilepas tidak bisa lagi mengubah antrean atau ikut berjalan saat lagu berikutnya diproses. Catatan "Submit ditekan" tetap selalu tersimpan agar tidak ada rilis ganda.
+- Tab Chrome yang dipakai bot ditampilkan ke depan, dan Chrome akun dibuka tanpa perlambatan tab latar/jendela tertutup, sehingga klik dan unggahan tidak tertahan saat Chrome diminimalkan. (Berlaku setelah Chrome akun ditutup lalu dibuka lagi.)

@@ -38,6 +38,8 @@ Untuk Claude (atau pengembang lain) yang melanjutkan aplikasi ini di sesi baru.
   persetujuan (centang) / tak dikenal menghentikan proses.
 - Sinkron hanya membaca halaman SoundOn yang tampil (tanpa API privat, tanpa mengubah apa pun).
 - Thread latar tidak menyentuh Tk langsung — pakai `ui_call(fn)`.
+- Studio unggah: setiap proses punya `cancel` sendiri (`self.run`); tunggu di alur harus lewat
+  `Flow.check()` agar berdetak, karena 4 menit tanpa detak dilepas pengaman macet (`watchdog()`).
 - Hanya halaman aktif yang hidup (batas handle Windows); halaman lain dihancurkan saat pindah menu.
 
 ## Berkas utama

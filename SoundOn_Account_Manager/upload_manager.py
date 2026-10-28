@@ -8,6 +8,7 @@ import json
 import os
 import queue
 import threading
+import time
 import uuid
 from datetime import date
 from pathlib import Path
@@ -34,6 +35,14 @@ FIELDS = {
     'copyright': ('Copyright',),
     'lyrics': ('Lirik', 'Lyrics'),
 }
+
+# Pengaman macet: proses unggah yang tidak membuat kemajuan selama STALL_SECONDS dilepas
+# (lagu ditandai "Perlu tindakan", antrean lanjut). Semua tunggu yang wajar di alur berdetak
+# lewat Flow.check(), dan satu panggilan Playwright paling lama ±60 detik, jadi 4 menit diam
+# berarti Chrome/halaman tidak merespons. Setelah Hentikan, proses dilepas bila tidak berhenti
+# sendiri dalam STOP_GRACE detik.
+STALL_SECONDS = 240
+STOP_GRACE = 20
 
 def save_queue(path, jobs):
     temporary = str(path) + '.tmp'
@@ -147,6 +156,7 @@ class UploadManager:
         self.events = queue.Queue()
         self.cancel = threading.Event()
         self.busy = False
+        self.run = None              # proses unggah aktif: job, cancel, beat (detak terakhir), stop_at
         self.paused = False          # Hentikan menjeda antrean otomatis sampai Mulai unggah ditekan
         self.seen_files = {}
         cfg = UI.load_settings()
@@ -165,7 +175,7 @@ class UploadManager:
             if job.get('status') == 'Memproses':
                 job['status'] = 'Terputus — periksa browser sebelum melanjutkan'
         self.window = tk.Toplevel(root)
-        self.window.title('SoundOn 3.18.2 — Studio unggah')
+        self.window.title('SoundOn 3.18.3 — Studio unggah')
         self.window.geometry('1120x740');self.window.minsize(920,600)
         self.window.configure(bg=BG)
         self.window.protocol('WM_DELETE_WINDOW', self.close)
@@ -482,20 +492,30 @@ class UploadManager:
                     job.update(status='Perlu tindakan',report='Chrome akun tidak bisa dibuka.');self.persist();return
                 launched=True
         auto_submit=bool(automatic and self.autosubmit.get())
-        self.cancel.clear();self.busy=True;job['status']='Memproses';self.persist()
+        # Event baru per proses: proses lama yang dilepas pengaman macet tetap berstatus dihentikan
+        # walaupun proses berikutnya dimulai.
+        run={'job':job['id'],'cancel':threading.Event(),'beat':time.monotonic(),'stop_at':None}
+        self.cancel=cancel=run['cancel'];self.run=run
+        self.busy=True;job['status']='Memproses';self.persist()
         snapshot=dict(job)
         self.events.put(('log',snapshot['id'],'▶ %s · %s'%(account.get('name',''),snapshot['title'])))
+        def beat():
+            run['beat']=time.monotonic()
+        def put(event):
+            # Proses yang sudah dilepas tidak boleh mengubah antrean lagi, kecuali catatan
+            # "Submit ditekan" (pengaman rilis ganda).
+            if self.run is run or event[0]=='submitclick':self.events.put(event)
         def worker():
             own_page=None
             try:
                 from playwright.sync_api import sync_playwright
                 with sync_playwright() as pw:
                     if open_target:
-                        self.events.put(('log',snapshot['id'],'Menunggu Chrome akun siap. Jika diminta, login pada browser.'))
+                        put(('log',snapshot['id'],'Menunggu Chrome akun siap. Jika diminta, login pada browser.'))
                         for _ in range(120):
-                            if self.cancel.is_set():raise NeedsAttention('Dihentikan pengguna.')
+                            if cancel.is_set():raise NeedsAttention('Dihentikan pengguna.')
                             if self.ready(account):break
-                            self.cancel.wait(1)
+                            beat();cancel.wait(1)
                         else:raise NeedsAttention('Chrome akun belum siap; login lalu tekan Buka akun lagi.')
                     browser=pw.chromium.connect_over_cdp(f'http://127.0.0.1:{self.port_for(account)}',timeout=10000)
                     if unattended:
@@ -505,39 +525,44 @@ class UploadManager:
                             for _ in range(20):
                                 found=[p for c in browser.contexts for p in c.pages if (urlparse(p.url).hostname or '').lower().endswith('soundon.global')]
                                 if len(found)==1:page=found[0];break
-                                self.cancel.wait(0.5)
+                                beat();cancel.wait(0.5)
                         if page is None:
                             ctx=browser.contexts[0] if browser.contexts else browser.new_context()
                             page=ctx.new_page()
                         own_page=page
                     else:
                         page=soundon_page(browser)
+                    # Tab di latar belakang diperlambat Chrome (animasi/timer berhenti), sehingga klik
+                    # menunggu lama atau gagal. Tampilkan tab yang dipakai bot.
+                    try:page.bring_to_front()
+                    except Exception:pass
+                    beat()
                     if open_target:
                         if page.url!=open_target:page.goto(open_target,wait_until='domcontentloaded',timeout=60000)
                         for _ in range(120):
-                            if self.cancel.is_set():raise NeedsAttention('Dihentikan pengguna.')
+                            if cancel.is_set():raise NeedsAttention('Dihentikan pengguna.')
                             low=page.url.lower()
                             if 'login' in low or 'signin' in low:
                                 if unattended:raise NeedsAttention('Akun belum login di Chrome. Login sekali, lalu lagu ini bisa diulang.')
-                            if Flow(page,snapshot,self.cancel,lambda text:None).stage()!='unknown':break
-                            self.cancel.wait(1)
+                            if Flow(page,snapshot,cancel,lambda text:None).stage()!='unknown':break
+                            beat();cancel.wait(1)
                         else:raise NeedsAttention('Formulir unggah belum siap. Selesaikan login lalu tekan Buka akun lagi.')
                     if snapshot.get('draft_url') and snapshot['draft_url']!=page.url:
                         raise ValueError('Halaman berbeda dari draf yang dicatat untuk lagu ini. Buka draf sebelumnya sebelum melanjutkan.')
                     if automatic:
-                        initial_stage=Flow(page,snapshot,self.cancel,lambda text:None).stage()
+                        initial_stage=Flow(page,snapshot,cancel,lambda text:None).stage()
                         if initial_stage=='unknown':raise ValueError('Tahap formulir belum dikenali. Periksa bahasa dan halaman unggah; dukungan Indonesia/Inggris aktif. Kirim screenshot halaman penuh beserta catatan ini jika masih berhenti.')
-                    self.events.put(('draft',snapshot['id'],page.url))
+                    put(('draft',snapshot['id'],page.url))
                     if automatic:
                         notes=[]
                         def log(text):
-                            notes.append(text);self.events.put(('log',snapshot['id'],text))
-                        flow=Flow(page,snapshot,self.cancel,log)
+                            beat();notes.append(text);put(('log',snapshot['id'],text))
+                        flow=Flow(page,snapshot,cancel,log,beat)
                         try:
                             status=flow.run()
                             if status=='Siap ditinjau' and auto_submit:
-                                self.events.put(('draft',snapshot['id'],page.url))
-                                status=submit_release(flow,lambda:self.events.put(('submitclick',snapshot['id'],datetime.now().strftime('%Y-%m-%d %H:%M:%S'))))
+                                put(('draft',snapshot['id'],page.url))
+                                status=submit_release(flow,lambda:put(('submitclick',snapshot['id'],datetime.now().strftime('%Y-%m-%d %H:%M:%S'))))
                                 report='\n'.join(notes)+'\nRilis dikirim ke SoundOn (Submit otomatis).'
                             else:
                                 report='\n'.join(notes)+'\nPeriksa seluruh informasi di Review. Tidak ada Submit yang ditekan.'
@@ -545,21 +570,21 @@ class UploadManager:
                             status='Perlu tindakan'
                             report='\n'.join(notes)+'\n'+str(ex)
                         if status!='Terkirim':
-                            self.events.put(('draft',snapshot['id'],page.url))
+                            put(('draft',snapshot['id'],page.url))
                         elif own_page is not None:
                             try:own_page.close()
                             except Exception:pass
-                        self.events.put((snapshot['id'],status,report))
+                        put((snapshot['id'],status,report))
                     else:
-                        done,pending=fill_visible_form(page,snapshot,self.cancel)
+                        done,pending=fill_visible_form(page,snapshot,cancel)
                         report='Terisi: '+(', '.join(done) or 'belum ada')+'\nPerlu manual: '+('; '.join(pending) or 'cek hasil di browser')
-                        self.events.put((snapshot['id'],'Periksa halaman aktif',report))
+                        put((snapshot['id'],'Periksa halaman aktif',report))
             except Exception as ex:
                 if 'page' in locals() and page is not None and ('initial_stage' not in locals() or initial_stage!='unknown'):
-                    try:self.events.put(('draft',snapshot['id'],page.url))
+                    try:put(('draft',snapshot['id'],page.url))
                     except Exception:pass
                 report='Playwright belum terpasang. Jalankan install_dependencies.bat.' if isinstance(ex,ImportError) else str(ex)
-                self.events.put((snapshot['id'],'Perlu tindakan',report))
+                put((snapshot['id'],'Perlu tindakan',report))
         threading.Thread(target=worker,daemon=True).start()
 
     # ------------------------------------------------------------ folder pantau
@@ -667,6 +692,7 @@ class UploadManager:
 
     def stop(self):
         self.cancel.set();self.paused=True
+        if self.run is not None and self.run['stop_at'] is None:self.run['stop_at']=time.monotonic()
         if hasattr(self,'watch_status'):self.redraw()
 
     def poll(self):
@@ -690,12 +716,27 @@ class UploadManager:
                     if status=='Terkirim':job['submitted_at']=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     elif job.get('submit_clicked'):
                         job['report']=report+'\nSubmit sudah ditekan '+job['submit_clicked']+'; cek Library SoundOn. Tidak dikirim ulang.'
-                self.busy=False;self.persist()
+                self.busy=False;self.run=None;self.persist()
                 if status in ('Siap ditinjau','Terkirim') and self.auto_next.get() and not self.cancel.is_set() and job and job.get('source')!='folder':
                     self.window.after(1000,lambda completed_id=jid:self.advance_queue(completed_id))
                 self.log.configure(state='normal');self.log.insert('end',report+'\n\n');self.log.see('end');self.log.configure(state='disabled')
         except queue.Empty:pass
+        self.watchdog()
         if self.window.winfo_exists():self.window.after(150,self.poll)
+
+    def watchdog(self):
+        """Lepaskan proses unggah yang macet agar antrean tidak tertahan selamanya."""
+        run=self.run
+        if not self.busy or run is None or not self.events.empty():return
+        now=time.monotonic()
+        if run['stop_at'] is not None and now-run['stop_at']>STOP_GRACE:
+            reason='Dihentikan pengguna. Chrome tidak merespons, jadi proses dilepas. Draf tetap terbuka di browser.'
+        elif now-run['beat']>STALL_SECONDS:
+            reason=('Macet: tidak ada kemajuan selama %d menit (halaman SoundOn/Chrome tidak merespons). '
+                    'Proses dilepas otomatis dan antrean lanjut. Periksa draf di browser, lalu ulangi lagu ini.'%(STALL_SECONDS//60))
+        else:return
+        run['cancel'].set();self.run=None
+        self.events.put((run['job'],'Perlu tindakan',reason))
 
     def close(self):
         if self.busy:
