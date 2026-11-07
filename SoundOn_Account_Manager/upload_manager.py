@@ -175,7 +175,7 @@ class UploadManager:
             if job.get('status') == 'Memproses':
                 job['status'] = 'Terputus — periksa browser sebelum melanjutkan'
         self.window = tk.Toplevel(root)
-        self.window.title('SoundOn 3.18.3 — Studio unggah')
+        self.window.title('SoundOn 3.18.4 — Studio unggah')
         self.window.geometry('1120x740');self.window.minsize(920,600)
         self.window.configure(bg=BG)
         self.window.protocol('WM_DELETE_WINDOW', self.close)
@@ -225,8 +225,10 @@ class UploadManager:
         UI.dark_checkbutton(actions,'  Lanjut ke lagu berikutnya',self.auto_next,PANEL).pack(side='right',padx=12)
         auto=tk.Frame(card,bg=UI.mix(PANEL,PURPLE,0.06));auto.pack(fill='x',padx=16,pady=(0,10))
         UI.icon(auto,'sync',16,PURPLE,auto.cget('bg')).pack(side='left',padx=(12,8),pady=8)
-        UI.dark_checkbutton(auto,'  Folder pantau (unggah otomatis)',self.watch,auto.cget('bg'),command=self.settings_changed).pack(side='left')
-        UI.dark_checkbutton(auto,'  Submit otomatis setelah Review',self.autosubmit,auto.cget('bg'),command=self.settings_changed).pack(side='left',padx=(16,0))
+        UI.dark_checkbutton(auto,'  Folder pantau',self.watch,auto.cget('bg'),command=self.settings_changed).pack(side='left')
+        UI.dark_checkbutton(auto,'  Submit otomatis',self.autosubmit,auto.cget('bg'),command=self.settings_changed).pack(side='left',padx=(16,0))
+        self.monetize=tk.BooleanVar(value=(monetize=='On'))
+        UI.dark_checkbutton(auto,'  Monetisasi CML & CapCut',self.monetize,auto.cget('bg'),command=self.monetize_changed).pack(side='left',padx=(16,0))
         UI.RoundButton(auto,'Buka folder',self.open_watch_folder,icon='folder',variant='ghost',font_size=9,height=28,padx=8).pack(side='right',padx=8,pady=4)
         self.watch_status=tk.StringVar()
         tk.Label(auto,textvariable=self.watch_status,bg=auto.cget('bg'),fg=MUTED,font=(FONT,9),anchor='w').pack(side='left',padx=14,fill='x',expand=True)
@@ -604,6 +606,17 @@ class UploadManager:
             upload_folder.ensure_folders();self.paused=False
             self.log_line('Folder pantau aktif: '+str(upload_folder.INBOX))
         self.redraw()
+
+    def monetize_changed(self):
+        import upload_quick
+        value='On' if self.monetize.get() else 'Off'
+        try:UI.save_settings(upload_defaults=dict(upload_quick.load_defaults(),monetize=self.monetize.get()))
+        except OSError:pass
+        for job in self.jobs:
+            if job.get('source') in ('cepat','folder') and not job.get('submit_clicked') and job.get('status')!='Terkirim':
+                job['cml']=job['capcut']=value
+        self.persist()
+        self.log_line('Monetisasi Commercial Music Licensing & CapCut: '+value+' untuk lagu berikutnya.')
 
     def log_line(self,text):
         self.log.configure(state='normal');self.log.insert('end',text+'\n');self.log.see('end');self.log.configure(state='disabled')

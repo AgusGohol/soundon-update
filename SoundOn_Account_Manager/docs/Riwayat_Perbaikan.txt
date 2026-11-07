@@ -227,3 +227,12 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Tombol Hentikan kini selalu berhasil: bila Chrome tidak merespons dalam 20 detik, proses dilepas sehingga Studio bisa dipakai dan ditutup lagi.
 - Proses yang sudah dilepas tidak bisa lagi mengubah antrean atau ikut berjalan saat lagu berikutnya diproses. Catatan "Submit ditekan" tetap selalu tersimpan agar tidak ada rilis ganda.
 - Tab Chrome yang dipakai bot ditampilkan ke depan, dan Chrome akun dibuka tanpa perlambatan tab latar/jendela tertutup, sehingga klik dan unggahan tidak tertahan saat Chrome diminimalkan. (Berlaku setelah Chrome akun ditutup lalu dibuka lagi.)
+
+
+3.18.4: Sinkron otomatis berjalan di latar tanpa mengganggu.
+- Chrome akun yang dibuka sinkron langsung diperkecil dan tetap diproses normal (tanpa perlambatan jendela tersembunyi).
+- Bila Chrome akun sedang Anda pakai, sinkron membuka tab baru di latar belakang, tidak mengambil fokus jendela.
+- Jendela/tab tambahan yang dibuka SoundOn selama sinkron (mis. halaman paket "Plans that grow with your career") langsung ditutup otomatis. Tab milik Anda tidak disentuh.
+- Bila tab Artists meminta paket berbayar, Asal Streams akun itu dilewati ("butuh paket SoundOn berbayar") tanpa menunggu lama; Streams dan saldo tetap dibaca.
+- Pembaruan tetap berjalan walau tag rilis GitHub ditulis tanpa "v" (cadangan unduhan, tetap diverifikasi SHA-256).
+- Studio unggah: centang "Monetisasi CML & CapCut" langsung di bar atas.

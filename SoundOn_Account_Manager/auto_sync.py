@@ -21,6 +21,9 @@ from datetime import date, datetime
 
 ANALYTICS_URL = 'https://www.soundon.global/library/analytics'
 ROYALTY_URL = 'https://www.soundon.global/library/royalty'
+# Halaman promosi paket SoundOn ("Plans that grow with your career") — bukan data; ditutup/dilewati.
+UPGRADE_URL = re.compile(r'/(pricing|plans?|upgrade|subscriptions?|membership|premium)(?:[/?#]|$)', re.I)
+UPGRADE_TEXT = re.compile(r'plans that grow with your career|paket yang tumbuh', re.I)
 MAX_ARTISTS = 12          # batas artis per akun agar satu putaran tidak terlalu lama
 REGION_WAIT = 15          # detik maksimum menunggu grafik wilayah satu artis yang punya Streams
 
@@ -166,7 +169,87 @@ class Syncer:
         while time.time() < end:
             if self.should_stop():
                 raise SyncStopped()
+            self._close_popups()
             time.sleep(0.25)
+
+    # ---- sinkron di latar: tidak membuka jendela/tab yang mengganggu
+    def _watch_popups(self, ctx, page):
+        """Tab/jendela yang dibuka SoundOn sendiri saat sinkron (mis. halaman paket Upgrade) dicatat
+        lalu ditutup di _sleep. Tab milik pengguna tidak disentuh."""
+        self._main_page = page
+        self._popups = []
+
+        def on_page(p):
+            try:
+                opener = p.opener()
+            except Exception:
+                opener = None
+            if opener is not None and opener == self._main_page:
+                self._popups.append((p, True))           # dibuka halaman sinkron: selalu ditutup
+            else:
+                self._popups.append((p, False))          # lainnya: ditutup hanya bila halaman paket
+        ctx.on('page', on_page)
+        self._popup_handler = (ctx, on_page)
+
+    def _unwatch_popups(self):
+        ctx, handler = getattr(self, '_popup_handler', (None, None))
+        if ctx is not None:
+            try:
+                ctx.remove_listener('page', handler)
+            except Exception:
+                pass
+        self._popup_handler = (None, None)
+        self._close_popups()
+        self._popups = []
+
+    def _close_popups(self):
+        pending = getattr(self, '_popups', None)
+        if not pending:
+            return
+        keep = []
+        for p, ours in pending:
+            try:
+                if p.is_closed():
+                    continue
+                upgrade = self._is_upgrade_page(p)
+                if upgrade:
+                    self._saw_upgrade = True
+                if ours or upgrade:
+                    p.close()
+                    self.log('  jendela tambahan SoundOn%s ditutup otomatis' % (' (paket Upgrade)' if upgrade else ''))
+                elif p.url in ('', 'about:blank'):
+                    keep.append((p, ours))                 # belum dimuat; periksa lagi nanti
+            except Exception:
+                pass
+        self._popups[:] = keep
+
+    def _new_background_page(self, browser, ctx):
+        """Tab baru di latar (tidak mengambil fokus jendela Chrome pengguna)."""
+        try:
+            cdp = browser.new_browser_cdp_session()
+            with ctx.expect_page(timeout=8000) as info:
+                cdp.send('Target.createTarget', {'url': 'about:blank', 'background': True})
+            return info.value
+        except Exception:
+            return ctx.new_page()
+
+    def _minimize(self, page):
+        """Perkecil jendela Chrome yang dibuka sinkron sendiri."""
+        try:
+            cdp = page.context.new_cdp_session(page)
+            wid = cdp.send('Browser.getWindowForTarget')['windowId']
+            cdp.send('Browser.setWindowBounds', {'windowId': wid, 'bounds': {'windowState': 'minimized'}})
+            cdp.detach()
+        except Exception:
+            pass
+
+    def _is_upgrade_page(self, page):
+        try:
+            if UPGRADE_URL.search(urllib.parse.urlsplit(page.url).path or ''):
+                return True
+            return bool(page.get_by_text(UPGRADE_TEXT).count())
+        except Exception:
+            return False
 
     def _launch(self, a):
         chrome = self.chrome_path()
@@ -175,6 +258,9 @@ class Syncer:
         os.makedirs(self.profile_dir(a), exist_ok=True)
         subprocess.Popen([chrome, '--user-data-dir=' + self.profile_dir(a), '--remote-debugging-address=127.0.0.1',
                           '--remote-debugging-port=' + str(self.port_for(a)), '--start-minimized',
+                          # Jendela diperkecil tetap diproses normal (tanpa perlambatan latar).
+                          '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
+                          '--disable-backgrounding-occluded-windows',
                           '--no-first-run', '--no-default-browser-check', 'about:blank'])
         for _ in range(80):
             self._sleep(0.5)
@@ -188,6 +274,8 @@ class Syncer:
             self._sleep(0.5)
             if 'login' in page.url.lower():
                 return 'saldo: perlu login'
+            if self._is_upgrade_page(page):
+                return 'saldo: SoundOn menampilkan halaman paket (Upgrade)'
             try:
                 result = self.read_balance(page)
             except Exception:
@@ -214,8 +302,12 @@ class Syncer:
         else:
             raise RuntimeError('tab Artists tidak ditemukan')
         rows, empty_hits = [], 0
+        self._upgrade = self._saw_upgrade = False
         for _ in range(30):
             self._sleep(0.5)
+            if self._is_upgrade_page(page) or self._saw_upgrade:
+                self._upgrade = True      # tab Artists butuh paket berbayar di akun ini
+                return []
             rows = page.evaluate(ARTIST_ROWS_JS) or []
             if rows:
                 break
@@ -310,6 +402,8 @@ class Syncer:
     def _regions(self, page, a):
         rows = self._open_artists_tab(page)
         if not rows:
+            if getattr(self, '_upgrade', False):
+                return 'asal Streams: butuh paket SoundOn berbayar, dilewati'
             return 'asal Streams: tidak ada artis'
         done, failed, empty = 0, 0, 0
         need_tab = False           # tab Artists hanya dibuka ulang bila harus menekan tombol
@@ -338,6 +432,8 @@ class Syncer:
                     break
                 self._sleep(0.5)
             if '/analytics/artist' not in page.url:
+                if self._is_upgrade_page(page):
+                    return 'asal Streams: butuh paket SoundOn berbayar, dilewati'
                 failed += 1
                 continue
             artist_id = urllib.parse.parse_qs(urllib.parse.urlsplit(page.url).query).get('id', [''])[0]
@@ -375,6 +471,8 @@ class Syncer:
             low = page.url.lower()
             if 'login' in low or 'signin' in low or 'sign-in' in low:
                 return 'login', 'Belum login. Buka akun ini dan login sekali.'
+            if self._is_upgrade_page(page):
+                return 'gagal', 'SoundOn menampilkan halaman paket (Upgrade), bukan Analytics.'
             try:
                 text = self.read_card(page, 'streams')
             except Exception:
@@ -449,8 +547,10 @@ class Syncer:
                 raise RuntimeError('Profil Chrome belum siap.')
             if opened_by_us and ctx.pages:
                 page = ctx.pages[0]
+                self._minimize(page)
             else:
-                page = ctx.new_page()
+                page = self._new_background_page(browser, ctx)
+            self._watch_popups(ctx, page)
             notes, oks, first_streams = [], [], None
             periods = self.periods
             for i, (p_start, p_end) in enumerate(periods):
@@ -487,6 +587,7 @@ class Syncer:
                     note += ' · saldo gagal: ' + str(exc).split('\n')[0][:120]
             return 'ok', note
         finally:
+            self._unwatch_popups()
             try:
                 if page is not None and not opened_by_us:
                     page.close()

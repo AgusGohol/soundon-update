@@ -22,6 +22,7 @@ import sys
 import tempfile
 import time
 import urllib.parse
+import urllib.error
 import urllib.request
 import zipfile
 from datetime import datetime
@@ -149,6 +150,14 @@ def read_manifest(url, repo='', timeout=25):
         prefix = ('https://github.com/%s/releases/download/' % repo).lower()
         if not data['zip_url'].lower().startswith(prefix):
             raise ValueError('ZIP pembaruan harus berasal dari rilis repo ' + repo + '.')
+        # Cadangan bila tag rilis di GitHub ditulis berbeda (mis. "3.18.2" tanpa "v").
+        # Isi ZIP tetap diverifikasi dengan SHA-256 dari manifest.
+        name = str(data.get('zip_name') or data['zip_url'].rsplit('/', 1)[-1])
+        if re.fullmatch(r'[A-Za-z0-9._-]+\.zip', name):
+            base = 'https://github.com/%s/releases/' % repo
+            alts = [base + 'latest/download/' + name, base + 'download/%s/%s' % (data['version'], name),
+                    base + 'download/v%s/%s' % (data['version'], name)]
+            data['zip_urls'] = list(dict.fromkeys([data['zip_url']] + alts))
     return data
 
 
@@ -202,7 +211,17 @@ def _zip_members(z):
 
 def prepare_update(manifest):
     """Unduh + verifikasi + ekstrak ke folder sementara. Kembalikan (staging, extract)."""
-    blob = download(manifest['zip_url'], MAX_ARCHIVE, timeout=60)
+    blob, last_error = None, None
+    for url in manifest.get('zip_urls') or [manifest['zip_url']]:
+        try:
+            blob = download(url, MAX_ARCHIVE, timeout=60)
+            break
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code != 404:
+                raise
+    if blob is None:
+        raise last_error or ValueError('ZIP pembaruan tidak ditemukan.')
     digest = hashlib.sha256(blob).hexdigest()
     if digest.lower() != manifest['sha256'].lower():
         raise ValueError('SHA-256 ZIP tidak cocok. Pembaruan dibatalkan.')
