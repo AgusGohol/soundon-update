@@ -64,6 +64,8 @@ NO_DATA_JS = r"""() => {
 # ID "store" SoundOn untuk filter platform. "Semua Platform" = tanpa parameter store.
 STORE_IDS = {'Spotify': '1026'}
 SUPPORTED_PLATFORMS = ('Semua Platform',) + tuple(STORE_IDS)
+# Status yang diulang otomatis sekali di akhir sinkron (opsi retry_failed).
+RETRY_STATUSES = ('login', 'lewati', 'gagal')
 
 RANGE_JS = r"""() => {
   const re = /(\d{4}-\d{2}-\d{2})\s*[~–-]\s*(\d{4}-\d{2}-\d{2})/;
@@ -149,7 +151,7 @@ class Syncer:
                  read_card, parse_number, on_progress, on_result, should_stop, busy_account=None, log=None,
                  read_balance=None, on_balance=None, read_regions=None, on_region=None, periods=None,
                  retry_failed=False):
-        self.retry_failed = retry_failed      # ulang sekali akun berstatus 'gagal' di akhir sinkron
+        self.retry_failed = retry_failed      # ulang sekali akun yang belum berhasil di akhir sinkron
         self.start, self.end = start, end
         # Beberapa periode sekaligus (mis. bulan ini + bulan lalu). Periode pertama juga dipakai
         # untuk Asal Streams.
@@ -614,24 +616,27 @@ class Syncer:
         self.log('Mulai sinkron %d akun · %s · %s' % (total, ', '.join('%s s.d. %s' % p for p in self.periods), self.platform))
         with sync_playwright() as pw:
             stopped = not self._pass(pw, accounts, summary)
-            # Ulang otomatis satu kali untuk akun yang gagal karena galat (bukan perlu login /
-            # dilewati: itu tidak berubah tanpa tindakan pengguna).
-            failed = list(summary['gagal'])
+            # Ulang otomatis satu kali untuk akun yang perlu login, dilewati, atau gagal (mis. login
+            # baru terbaca setelah halaman lambat, Studio unggah sudah selesai, galat jaringan).
+            failed = [(a, note, key) for key in RETRY_STATUSES for a, note in summary[key]]
             if self.retry_failed and failed and not stopped:
-                self.log('Mengulang %d akun yang gagal…' % len(failed))
-                summary['gagal'] = []
+                self.log('Mengulang %d akun yang belum berhasil…' % len(failed))
+                for key in RETRY_STATUSES:
+                    summary[key] = []
                 retry = {'ok': [], 'login': [], 'lewati': [], 'gagal': []}
                 try:
                     self._sleep(10)
-                    done = self._pass(pw, [a for a, _ in failed], retry, again=True)
+                    done = self._pass(pw, [a for a, _, _ in failed], retry, again=True)
                 except SyncStopped:
                     done = False
                 for key in summary:
                     summary[key].extend(retry[key])
                 if not done:
-                    # Akun yang belum sempat diulang tetap tercatat gagal dengan keterangan awalnya.
+                    # Akun yang belum sempat diulang tetap tercatat dengan status dan keterangan awalnya.
                     tried = {id(a) for key in retry for a, _ in retry[key]}
-                    summary['gagal'].extend((a, note) for a, note in failed if id(a) not in tried)
+                    for a, note, key in failed:
+                        if id(a) not in tried:
+                            summary[key].append((a, note))
         return summary
 
     def _pass(self, pw, accounts, summary, again=False):

@@ -243,3 +243,9 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Tombol "Buka akun yang perlu login" membuka Chrome akun-akun itu sekaligus. Login sekali, lalu klik Ulangi.
 - Daftar akun yang belum berhasil tetap tersimpan walau aplikasi ditutup: ulangi kapan saja dari menu Sinkron > "Ulangi akun yang belum berhasil" atau Pengaturan > Sinkron Otomatis > "Ulangi yang gagal". Ini juga berlaku untuk sinkron harian otomatis.
 - Opsi baru (aktif bawaan): "Ulangi otomatis sekali akun yang gagal (galat/jaringan) di akhir sinkron". Akun yang perlu login atau dilewati tidak diulang otomatis karena butuh tindakan Anda.
+
+
+3.18.6: Ulang otomatis juga untuk akun perlu login dan dilewati.
+- Di akhir sinkron, akun yang perlu login, dilewati, atau gagal dibaca ulang sekali secara otomatis (sebelumnya hanya yang gagal). Berguna bila login baru terbaca setelah halaman lambat, Chrome akun baru terbuka, atau Studio unggah sudah selesai memakai akun itu.
+- Opsi di Pengaturan > Sinkron Otomatis kini bernama "Ulangi otomatis sekali akun yang perlu login, dilewati, atau gagal di akhir sinkron" (aktif bawaan).
+- Akun yang tetap belum berhasil setelah diulang masih bisa diulang manual dengan tombol "Ulangi yang belum berhasil".

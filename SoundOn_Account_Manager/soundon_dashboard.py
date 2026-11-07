@@ -41,7 +41,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, FONT_SEMI, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.18.5'
+APP_VERSION='3.18.6'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -2345,7 +2345,7 @@ def render_active_page():
         UI.dark_checkbutton(syn,'  Buka Chrome akun yang tertutup (diperkecil), lalu tutup lagi setelah dibaca',oc_var,PANEL,command=save_sync).pack(anchor='w')
         UI.dark_checkbutton(syn,'  Baca juga Saldo tersedia (My Earnings)',bal_var,PANEL,command=save_sync).pack(anchor='w')
         UI.dark_checkbutton(syn,'  Baca juga Asal Streams per artis (Indonesia / Amerika Serikat), maks. 12 artis per akun',reg_var,PANEL,command=save_sync).pack(anchor='w')
-        UI.dark_checkbutton(syn,'  Ulangi otomatis sekali akun yang gagal (galat/jaringan) di akhir sinkron',rt_var,PANEL,command=save_sync).pack(anchor='w')
+        UI.dark_checkbutton(syn,'  Ulangi otomatis sekali akun yang perlu login, dilewati, atau gagal di akhir sinkron',rt_var,PANEL,command=save_sync).pack(anchor='w')
         label(syn,'Akun yang belum login dilewati dan dicatat di laporan. Platform yang didukung: Semua Platform dan Spotify.',9,MUTED).pack(anchor='w',pady=(6,4))
         info=tk.Frame(syn,bg=PANEL);info.pack(fill='x',pady=(4,0))
         label(info,_sync_state['text'] or cfg['last_summary'] or 'Belum pernah dijalankan.',9,DIM).pack(side='left')
