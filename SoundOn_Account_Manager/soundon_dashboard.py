@@ -41,7 +41,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, FONT_SEMI, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.18.4'
+APP_VERSION='3.18.5'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -676,6 +676,7 @@ def sync_settings():
     except (TypeError,ValueError):hour=8
     return {'enabled':bool(st.get('sync_enabled',True)),'hour':hour,'open_closed':bool(st.get('sync_open_closed',True)),
             'balance':bool(st.get('sync_balance',True)),'regions':bool(st.get('sync_regions',True)),
+            'retry_failed':bool(st.get('sync_retry_failed',True)),
             'last_date':st.get('sync_last_date',''),'last_summary':st.get('sync_last_summary','')}
 
 def _sync_log(text):
@@ -729,8 +730,9 @@ def ask_month_and_sync():
     button(acts,'Mulai sinkron',go,True,icon='sync').pack(side='right')
     button(acts,'Batal',w.destroy,variant='ghost').pack(side='right',padx=6)
 
-def start_sync(auto=False,periods=None):
-    """Baca Streams & Pendengar semua akun dari Analytics SoundOn (di latar belakang)."""
+def start_sync(auto=False,periods=None,only_ids=None,plat=None):
+    """Baca Streams & Pendengar semua akun dari Analytics SoundOn (di latar belakang).
+    only_ids: hanya akun ini (Ulangi yang belum berhasil), tanpa konfirmasi."""
     if _sync_state['running']:
         if not auto:messagebox.showinfo('Sinkron berjalan','Sinkron sedang berjalan: '+_sync_state['text'],parent=root)
         return
@@ -744,22 +746,27 @@ def start_sync(auto=False,periods=None):
         if end<start:start,end=end,start
         periods=[(start,end)]
     start,end=periods[0]
-    plat=platform_var.get()
+    plat=plat or platform_var.get()
     note=''
     if plat not in auto_sync.SUPPORTED_PLATFORMS:
         note=f'\n\nPlatform {plat} belum didukung sinkron otomatis; yang dibaca: Semua Platform.'
         plat='Semua Platform'
     cfg=sync_settings()
     targets=list(accounts)
-    if not auto:
+    if only_ids is not None:
+        wanted={str(x) for x in only_ids}
+        targets=[a for a in accounts if str(a['id']) in wanted]
+        if not targets:
+            messagebox.showinfo('Tidak ada akun','Akun yang perlu diulang sudah tidak ada di daftar.',parent=root);return
+    if not auto and only_ids is None:
         minutes=max(1,round(len(targets)*(35+(25 if cfg['balance'] else 0)+(60 if cfg['regions'] else 0))/60))
         extra='Chrome akun yang tertutup akan dibuka (diperkecil) lalu ditutup lagi.' if cfg['open_closed'] else 'Hanya akun yang Chrome-nya sedang terbuka yang dibaca.'
         what='Streams & Pendengar'+(', Saldo' if cfg['balance'] else '')+(', Asal Streams per artis' if cfg['regions'] else '')
         ptxt=', '.join(f'{p[0]} s.d. {p[1]}' for p in periods)
         if not messagebox.askyesno('Sinkron semua akun',f'Baca {what} untuk {len(targets)} akun\nPeriode: {ptxt} · {plat}\n\n{extra}\n'
                                    f'Perkiraan waktu ± {minutes} menit. Aplikasi tetap bisa dipakai.{note}\n\nMulai sekarang?',parent=root):return
-    _sync_state.update(running=True,stop=False)
-    _set_sync_status(f'Sinkron dimulai · {len(targets)} akun')
+    _sync_state.update(running=True,stop=False,periods=list(periods),plat=plat)
+    _set_sync_status(f'Sinkron dimulai · {len(targets)} akun'+(' (ulang)' if only_ids is not None else ''))
     busy=_upload_busy_accounts()
     def apply_balance(a,amount,currency):
         if a in accounts:
@@ -785,7 +792,7 @@ def start_sync(auto=False,periods=None):
         read_balance=visible_available_balance if cfg['balance'] else None,
         on_balance=lambda a,n,c:ui_call(lambda:apply_balance(a,n,c)),
         read_regions=(lambda page:page.evaluate(REGION_SVG_JS)) if cfg['regions'] else None,
-        on_region=lambda a,row:ui_call(lambda:apply_region(a,row)))
+        on_region=lambda a,row:ui_call(lambda:apply_region(a,row)),retry_failed=cfg['retry_failed'])
     def worker():
         try:summary=syncer.run(targets);error=None
         except Exception as exc:
@@ -806,15 +813,61 @@ def _finish_sync(summary,error,auto):
     _set_sync_status(text)
     try:UI.save_settings(sync_last_date=date.today().isoformat(),sync_last_summary=text)
     except OSError:pass
+    if summary:
+        # Akun yang belum berhasil disimpan agar bisa diulang (juga setelah aplikasi dibuka ulang).
+        pending=[str(a['id']) for key in ('login','gagal','lewati') for a,_ in summary[key]]
+        retry={'ids':pending,'platform':_sync_state.get('plat','Semua Platform'),
+               'periods':[[str(s),str(e)] for s,e in _sync_state.get('periods',[])]}
+        try:UI.save_settings(sync_retry=retry)
+        except OSError:pass
     refresh()
     if not auto:
         detail=''
         if summary:
-            for key,title in (('login','Perlu login'),('gagal','Gagal')):
+            for key,title in (('login','Perlu login'),('gagal','Gagal'),('lewati','Dilewati')):
                 if summary[key]:
                     detail+=f'\n\n{title}:\n'+'\n'.join('•  '+a.get('name','')+' — '+n for a,n in summary[key][:10])
                     if len(summary[key])>10:detail+=f'\n…dan {len(summary[key])-10} lainnya'
-        messagebox.showinfo('Sinkron selesai',text+detail+'\n\nLaporan lengkap: Pengaturan > Sinkron Otomatis > Lihat laporan.',parent=root)
+        _sync_done_dialog(text+detail,[a for a,_ in summary['login']] if summary else [])
+
+def _pending_retry():
+    """(akun, periode, platform) dari sinkron terakhir yang belum berhasil."""
+    data=UI.load_settings().get('sync_retry') or {}
+    ids={str(x) for x in data.get('ids',[])}
+    try:periods=[(parse_date(s),parse_date(e)) for s,e in data.get('periods',[])]
+    except (TypeError,ValueError):periods=[]
+    return [a for a in accounts if str(a['id']) in ids],periods,data.get('platform') or 'Semua Platform'
+
+def retry_failed_sync():
+    """Sinkron ulang hanya akun yang belum berhasil pada sinkron terakhir (periode yang sama)."""
+    targets,periods,plat=_pending_retry()
+    if not targets:
+        messagebox.showinfo('Tidak ada yang diulang','Semua akun berhasil pada sinkron terakhir.',parent=root);return
+    start_sync(periods=periods or None,only_ids=[a['id'] for a in targets],plat=plat)
+
+def open_login_accounts(items):
+    """Buka Chrome akun yang perlu login (satu jendela per akun) untuk login sekali."""
+    for a in items:
+        if not debugger_ready(a):open_account(a)
+
+def _sync_done_dialog(text,login_items):
+    pending=len(_pending_retry()[0])
+    if not pending:
+        messagebox.showinfo('Sinkron selesai',text+'\n\nLaporan lengkap: Pengaturan > Sinkron Otomatis > Lihat laporan.',parent=root);return
+    w=tk.Toplevel(root);w.title('Sinkron selesai');w.configure(bg=PANEL);w.transient(root);w.resizable(False,False)
+    body=tk.Frame(w,bg=PANEL);body.pack(padx=22,pady=18,fill='both')
+    label(body,'Sinkron selesai',14,bold=True).pack(anchor='w')
+    label(body,text,10,justify='left',wraplength=520).pack(anchor='w',pady=(8,0))
+    hint=('Login dulu lewat "Buka akun yang perlu login", lalu klik Ulangi.' if login_items else
+          'Ulangi membaca lagi hanya akun di atas, dengan periode yang sama.')
+    label(body,hint+'\nBisa juga nanti dari menu Sinkron > Ulangi akun yang belum berhasil.',9,DIM,justify='left',wraplength=520).pack(anchor='w',pady=(10,0))
+    acts=tk.Frame(body,bg=PANEL);acts.pack(fill='x',pady=(16,0))
+    def again():
+        w.destroy();retry_failed_sync()
+    button(acts,f'Ulangi yang belum berhasil ({pending})',again,True,icon='sync').pack(side='right')
+    if login_items:
+        button(acts,'Buka akun yang perlu login',lambda:open_login_accounts(login_items)).pack(side='right',padx=6)
+    button(acts,'Tutup',w.destroy,variant='ghost').pack(side='right',padx=(0,6))
 
 def stop_sync():
     if _sync_state['running']:
@@ -2280,9 +2333,10 @@ def render_active_page():
                          'Sinkron harian membaca data bulanan: Bulan ini (dan Bulan lalu pada tanggal 1–3).','sync',GREEN)
         en_var=tk.BooleanVar(value=cfg['enabled']);oc_var=tk.BooleanVar(value=cfg['open_closed']);hr_var=tk.StringVar(value='%02d:00'%cfg['hour'])
         bal_var=tk.BooleanVar(value=cfg['balance']);reg_var=tk.BooleanVar(value=cfg['regions'])
+        rt_var=tk.BooleanVar(value=cfg['retry_failed'])
         def save_sync(*_):
             try:UI.save_settings(sync_enabled=en_var.get(),sync_open_closed=oc_var.get(),sync_hour=int(hr_var.get()[:2]),
-                                 sync_balance=bal_var.get(),sync_regions=reg_var.get())
+                                 sync_balance=bal_var.get(),sync_regions=reg_var.get(),sync_retry_failed=rt_var.get())
             except (OSError,ValueError):pass
         row1=tk.Frame(syn,bg=PANEL);row1.pack(fill='x',pady=(0,6))
         UI.dark_checkbutton(row1,'  Aktifkan sinkron harian pukul',en_var,PANEL,command=save_sync).pack(side='left')
@@ -2291,11 +2345,13 @@ def render_active_page():
         UI.dark_checkbutton(syn,'  Buka Chrome akun yang tertutup (diperkecil), lalu tutup lagi setelah dibaca',oc_var,PANEL,command=save_sync).pack(anchor='w')
         UI.dark_checkbutton(syn,'  Baca juga Saldo tersedia (My Earnings)',bal_var,PANEL,command=save_sync).pack(anchor='w')
         UI.dark_checkbutton(syn,'  Baca juga Asal Streams per artis (Indonesia / Amerika Serikat), maks. 12 artis per akun',reg_var,PANEL,command=save_sync).pack(anchor='w')
+        UI.dark_checkbutton(syn,'  Ulangi otomatis sekali akun yang gagal (galat/jaringan) di akhir sinkron',rt_var,PANEL,command=save_sync).pack(anchor='w')
         label(syn,'Akun yang belum login dilewati dan dicatat di laporan. Platform yang didukung: Semua Platform dan Spotify.',9,MUTED).pack(anchor='w',pady=(6,4))
         info=tk.Frame(syn,bg=PANEL);info.pack(fill='x',pady=(4,0))
         label(info,_sync_state['text'] or cfg['last_summary'] or 'Belum pernah dijalankan.',9,DIM).pack(side='left')
         button(info,'Lihat laporan',open_sync_log,icon='info',font_size=9,height=30).pack(side='right')
         button(info,'Hentikan',stop_sync,variant='danger',icon='stop',font_size=9,height=30).pack(side='right',padx=6)
+        button(info,'Ulangi yang gagal',retry_failed_sync,icon='sync',font_size=9,height=30).pack(side='right')
         button(info,'Sinkron per bulan…',ask_month_and_sync,True,icon='sync',font_size=9,height=30).pack(side='right')
         # Data & transfer
         data_sec=page_section(page_body,'Data & Transfer Akun','Cadangkan data atau pindahkan akun ke komputer lain.','database',BLUE)
@@ -2447,7 +2503,7 @@ def _period_changed():
     refresh()
 button(head,'⟳  Refresh',lambda:(poll_chrome_status(),refresh())).pack(side='right',padx=(8,0))
 menu_button(head,'Sinkron',[('Sinkron semua akun (periode terpilih)',lambda:start_sync()),('Sinkron per bulan…',ask_month_and_sync),
-                            ('Hentikan sinkron',stop_sync),None,
+                            ('Ulangi akun yang belum berhasil',retry_failed_sync),('Hentikan sinkron',stop_sync),None,
                             ('Lihat laporan sinkron',open_sync_log),('Pengaturan sinkron…',lambda:switch_page('Pengaturan'))],
             icon='sync',variant='subtle').pack(side='right',padx=(8,0))
 platforms=['Semua Platform','Spotify','TikTok','Amazon Music','YouTube Music','Apple Music','Lainnya']

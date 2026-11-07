@@ -147,7 +147,9 @@ class Syncer:
 
     def __init__(self, *, start, end, platform, open_closed, chrome_path, profile_dir, port_for, ready,
                  read_card, parse_number, on_progress, on_result, should_stop, busy_account=None, log=None,
-                 read_balance=None, on_balance=None, read_regions=None, on_region=None, periods=None):
+                 read_balance=None, on_balance=None, read_regions=None, on_region=None, periods=None,
+                 retry_failed=False):
+        self.retry_failed = retry_failed      # ulang sekali akun berstatus 'gagal' di akhir sinkron
         self.start, self.end = start, end
         # Beberapa periode sekaligus (mis. bulan ini + bulan lalu). Periode pertama juga dipakai
         # untuk Asal Streams.
@@ -611,23 +613,49 @@ class Syncer:
         total = len(accounts)
         self.log('Mulai sinkron %d akun · %s · %s' % (total, ', '.join('%s s.d. %s' % p for p in self.periods), self.platform))
         with sync_playwright() as pw:
-            for i, a in enumerate(accounts, 1):
-                if self.should_stop():
-                    self.log('Dihentikan pengguna.')
-                    break
-                self.on_progress(i, total, a)
+            stopped = not self._pass(pw, accounts, summary)
+            # Ulang otomatis satu kali untuk akun yang gagal karena galat (bukan perlu login /
+            # dilewati: itu tidak berubah tanpa tindakan pengguna).
+            failed = list(summary['gagal'])
+            if self.retry_failed and failed and not stopped:
+                self.log('Mengulang %d akun yang gagal…' % len(failed))
+                summary['gagal'] = []
+                retry = {'ok': [], 'login': [], 'lewati': [], 'gagal': []}
                 try:
-                    status, note = self.sync_one(pw, a)
+                    self._sleep(10)
+                    done = self._pass(pw, [a for a, _ in failed], retry, again=True)
                 except SyncStopped:
-                    self.log('Dihentikan pengguna.')
-                    break
-                except Exception as exc:
-                    status, note = 'gagal', str(exc).split('\n')[0][:200]
-                summary[status].append((a, note))
-                self.log('[%s] %s (#%s): %s' % (status.upper(), a.get('name', ''), a.get('id'), note))
-                try:
-                    self._sleep(3)        # jeda sopan antarakun
-                except SyncStopped:
-                    self.log('Dihentikan pengguna.')
-                    break
+                    done = False
+                for key in summary:
+                    summary[key].extend(retry[key])
+                if not done:
+                    # Akun yang belum sempat diulang tetap tercatat gagal dengan keterangan awalnya.
+                    tried = {id(a) for key in retry for a, _ in retry[key]}
+                    summary['gagal'].extend((a, note) for a, note in failed if id(a) not in tried)
         return summary
+
+    def _pass(self, pw, accounts, summary, again=False):
+        """Sinkron satu putaran. Mengembalikan False bila dihentikan pengguna."""
+        total = len(accounts)
+        for i, a in enumerate(accounts, 1):
+            if self.should_stop():
+                self.log('Dihentikan pengguna.')
+                return False
+            self.on_progress(i, total, a)
+            try:
+                status, note = self.sync_one(pw, a)
+            except SyncStopped:
+                self.log('Dihentikan pengguna.')
+                return False
+            except Exception as exc:
+                status, note = 'gagal', str(exc).split('\n')[0][:200]
+            if again:
+                note = 'ulang: ' + note
+            summary[status].append((a, note))
+            self.log('[%s] %s (#%s): %s' % (status.upper(), a.get('name', ''), a.get('id'), note))
+            try:
+                self._sleep(3)        # jeda sopan antarakun
+            except SyncStopped:
+                self.log('Dihentikan pengguna.')
+                return False
+        return True

@@ -236,3 +236,10 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Bila tab Artists meminta paket berbayar, Asal Streams akun itu dilewati ("butuh paket SoundOn berbayar") tanpa menunggu lama; Streams dan saldo tetap dibaca.
 - Pembaruan tetap berjalan walau tag rilis GitHub ditulis tanpa "v" (cadangan unduhan, tetap diverifikasi SHA-256).
 - Studio unggah: centang "Monetisasi CML & CapCut" langsung di bar atas.
+
+
+3.18.5: Sinkron bisa diulang untuk akun yang belum berhasil.
+- Jendela "Sinkron selesai" kini punya tombol "Ulangi yang belum berhasil": hanya akun yang perlu login, gagal, atau dilewati yang dibaca ulang, dengan periode dan platform yang sama.
+- Tombol "Buka akun yang perlu login" membuka Chrome akun-akun itu sekaligus. Login sekali, lalu klik Ulangi.
+- Daftar akun yang belum berhasil tetap tersimpan walau aplikasi ditutup: ulangi kapan saja dari menu Sinkron > "Ulangi akun yang belum berhasil" atau Pengaturan > Sinkron Otomatis > "Ulangi yang gagal". Ini juga berlaku untuk sinkron harian otomatis.
+- Opsi baru (aktif bawaan): "Ulangi otomatis sekali akun yang gagal (galat/jaringan) di akhir sinkron". Akun yang perlu login atau dilewati tidak diulang otomatis karena butuh tindakan Anda.
