@@ -24,6 +24,7 @@ ROYALTY_URL = 'https://www.soundon.global/library/royalty'
 # Halaman promosi paket SoundOn ("Plans that grow with your career") — bukan data; ditutup/dilewati.
 UPGRADE_URL = re.compile(r'/(pricing|plans?|upgrade|subscriptions?|membership|premium)(?:[/?#]|$)', re.I)
 UPGRADE_TEXT = re.compile(r'plans that grow with your career|paket yang tumbuh', re.I)
+PROMO_SKIPS = 2           # berapa kali halaman promosi paket dilewati (buka ulang tujuan) sebelum menyerah
 MAX_ARTISTS = 12          # batas artis per akun agar satu putaran tidak terlalu lama
 REGION_WAIT = 15          # detik maksimum menunggu grafik wilayah satu artis yang punya Streams
 
@@ -272,13 +273,27 @@ class Syncer:
                 return
         raise RuntimeError('Chrome akun tidak siap dalam 40 detik.')
 
+    def _skip_promo(self, page, url, skipped):
+        """SoundOn kadang mengalihkan ke halaman promosi paket ("Plans that grow with your career")
+        walau halaman tujuan bisa dibuka. Buka ulang tujuan, paling banyak PROMO_SKIPS kali.
+        Mengembalikan True bila sudah dilewati (lanjut menunggu), False bila sudah habis."""
+        if skipped[0] >= PROMO_SKIPS:
+            return False
+        skipped[0] += 1
+        self.log('  halaman promosi paket SoundOn dilewati; membuka ulang halaman tujuan')
+        page.goto(url, wait_until='domcontentloaded', timeout=60000)
+        return True
+
     def _balance(self, page, a):
         page.goto(ROYALTY_URL, wait_until='domcontentloaded', timeout=60000)
+        skipped = [0]
         for _ in range(50):
             self._sleep(0.5)
             if 'login' in page.url.lower():
                 return 'saldo: perlu login'
             if self._is_upgrade_page(page):
+                if self._skip_promo(page, ROYALTY_URL, skipped):
+                    continue
                 return 'saldo: SoundOn menampilkan halaman paket (Upgrade)'
             try:
                 result = self.read_balance(page)
@@ -470,12 +485,15 @@ class Syncer:
         page.goto(url, wait_until='domcontentloaded', timeout=60000)
         # Tunggu sampai kartu Streams tampil, atau terdeteksi halaman login.
         text = None
+        skipped = [0]
         for _ in range(60):
             self._sleep(0.5)
             low = page.url.lower()
             if 'login' in low or 'signin' in low or 'sign-in' in low:
                 return 'login', 'Belum login. Buka akun ini dan login sekali.'
             if self._is_upgrade_page(page):
+                if self._skip_promo(page, url, skipped):
+                    continue
                 return 'gagal', 'SoundOn menampilkan halaman paket (Upgrade), bukan Analytics.'
             try:
                 text = self.read_card(page, 'streams')

@@ -254,3 +254,9 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 3.18.7: Tombol Ulangi juga bekerja untuk sinkron sebelum versi 3.18.5.
 - Daftar akun yang belum berhasil kini dibaca dari laporan sinkron (sync_log.txt), yang ditulis oleh semua versi. Sebelumnya tombol Ulangi hanya mengenali sinkron yang berjalan di 3.18.5 ke atas dan salah menampilkan "Semua akun berhasil".
 - Bila belum pernah ada sinkron, pesannya kini "Belum ada catatan sinkron", bukan "Semua akun berhasil".
+
+
+3.18.8: Halaman promosi paket SoundOn dilewati otomatis.
+- Bila SoundOn mengalihkan ke halaman paket "Plans that grow with your career" (/library/pricing), bot langsung membuka ulang halaman tujuan, paling banyak 2 kali, lalu melanjutkan.
+- Berlaku untuk sinkron (Streams/Pendengar dan Saldo), Studio unggah (formulir unggah), serta tombol buka Streams/Saldo per akun di dashboard. Sebelumnya sinkron langsung mencatat akun itu "gagal".
+- Tab Artists yang memang butuh paket berbayar tetap dilewati seperti sebelumnya ("butuh paket SoundOn berbayar"); bot tidak pernah menekan Upgrade.

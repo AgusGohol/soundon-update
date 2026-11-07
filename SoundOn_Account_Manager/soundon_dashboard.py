@@ -41,7 +41,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, FONT_SEMI, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.18.7'
+APP_VERSION='3.18.8'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -362,6 +362,14 @@ def open_soundon_page(a, target_url, page_title):
                        if urllib.parse.urlparse(p.url).hostname in ('soundon.global','www.soundon.global')]
                 page=pages[-1] if pages else contexts[0].new_page()
                 page.goto(target_url,wait_until='domcontentloaded',timeout=30000)
+                # SoundOn kadang menyelipkan halaman promosi paket; buka ulang tujuan.
+                for _ in range(auto_sync.PROMO_SKIPS):
+                    time.sleep(2)
+                    try:promo=bool(auto_sync.UPGRADE_URL.search(urllib.parse.urlsplit(page.url).path or '')
+                                   or page.get_by_text(auto_sync.UPGRADE_TEXT).count())
+                    except Exception:promo=False
+                    if not promo:break
+                    page.goto(target_url,wait_until='domcontentloaded',timeout=30000)
                 page.bring_to_front()
                 ui_call(lambda:status_var.set(page_title+' terbuka: '+a.get('name','akun')))
         except Exception as ex:

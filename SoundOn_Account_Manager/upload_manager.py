@@ -17,6 +17,7 @@ from tkinter import ttk, filedialog, messagebox
 from urllib.parse import urlparse
 from soundon_upload_flow import Flow, NeedsAttention, validate_automatic, validate_recorded_fields, submit_release
 import upload_folder
+from auto_sync import UPGRADE_URL, UPGRADE_TEXT, PROMO_SKIPS
 from datetime import datetime
 import ui_theme as UI
 from ui_theme import BG, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER, FONT
@@ -74,6 +75,15 @@ def soundon_page(browser):
     if len(pages) != 1:
         raise ValueError('Sisakan satu tab SoundOn pada Chrome akun ini, lalu buka formulir unggahnya.')
     return pages[0]
+
+
+def is_promo_page(page):
+    """Halaman promosi paket SoundOn ("Plans that grow with your career"), bukan formulir."""
+    try:
+        if UPGRADE_URL.search(urlparse(page.url).path or ''):return True
+        return bool(page.get_by_text(UPGRADE_TEXT).count())
+    except Exception:
+        return False
 
 
 def fill_visible_form(page, job, cancelled):
@@ -175,7 +185,7 @@ class UploadManager:
             if job.get('status') == 'Memproses':
                 job['status'] = 'Terputus — periksa browser sebelum melanjutkan'
         self.window = tk.Toplevel(root)
-        self.window.title('SoundOn 3.18.7 — Studio unggah')
+        self.window.title('SoundOn 3.18.8 — Studio unggah')
         self.window.geometry('1120x740');self.window.minsize(920,600)
         self.window.configure(bg=BG)
         self.window.protocol('WM_DELETE_WINDOW', self.close)
@@ -541,11 +551,19 @@ class UploadManager:
                     beat()
                     if open_target:
                         if page.url!=open_target:page.goto(open_target,wait_until='domcontentloaded',timeout=60000)
+                        promo_skips=0
                         for _ in range(120):
                             if cancel.is_set():raise NeedsAttention('Dihentikan pengguna.')
                             low=page.url.lower()
                             if 'login' in low or 'signin' in low:
                                 if unattended:raise NeedsAttention('Akun belum login di Chrome. Login sekali, lalu lagu ini bisa diulang.')
+                            if is_promo_page(page):
+                                # SoundOn kadang menyelipkan halaman promosi paket; buka ulang formulir.
+                                if promo_skips>=PROMO_SKIPS:raise NeedsAttention('SoundOn terus menampilkan halaman paket (Upgrade), bukan formulir unggah. Buka formulir unggah di browser lalu ulangi.')
+                                promo_skips+=1
+                                put(('log',snapshot['id'],'Halaman promosi paket SoundOn dilewati; membuka ulang formulir unggah.'))
+                                beat();page.goto(open_target,wait_until='domcontentloaded',timeout=60000)
+                                continue
                             if Flow(page,snapshot,cancel,lambda text:None).stage()!='unknown':break
                             beat();cancel.wait(1)
                         else:raise NeedsAttention('Formulir unggah belum siap. Selesaikan login lalu tekan Buka akun lagi.')
