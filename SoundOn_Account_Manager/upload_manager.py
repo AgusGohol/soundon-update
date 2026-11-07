@@ -20,22 +20,7 @@ import upload_folder
 from auto_sync import UPGRADE_URL, UPGRADE_TEXT, PROMO_SKIPS
 from datetime import datetime
 import ui_theme as UI
-from ui_theme import BG, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER, FONT
-
-FIELDS = {
-    'title': ('Judul lagu', 'Track title', 'Song title'),
-    'release_title': ('Judul rilis', 'Release title'),
-    'artist': ('Nama artis', 'Artist name', 'Primary artist'),
-    'language': ('Bahasa', 'Language'),
-    'genre': ('Genre', 'Primary genre'),
-    'release_date': ('Tanggal rilis', 'Release date'),
-    'composer': ('Komposer', 'Composer'),
-    'lyricist': ('Penulis lirik', 'Lyricist'),
-    'isrc': ('ISRC',),
-    'upc': ('UPC',),
-    'copyright': ('Copyright',),
-    'lyrics': ('Lirik', 'Lyrics'),
-}
+from ui_theme import BG, PANEL, CARD, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, BLUE, AMBER, FONT
 
 # Pengaman macet: proses unggah yang tidak membuat kemajuan selama STALL_SECONDS dilepas
 # (lagu ditandai "Perlu tindakan", antrean lanjut). Semua tunggu yang wajar di alur berdetak
@@ -86,73 +71,6 @@ def is_promo_page(page):
         return False
 
 
-def fill_visible_form(page, job, cancelled):
-    """Exact accessible labels only; ambiguous or complex controls stay manual."""
-    done, pending = [], []
-    for key, labels in FIELDS.items():
-        if cancelled.is_set():
-            return done, pending + ['Dihentikan pengguna']
-        value = job.get(key, '').strip()
-        if not value:
-            continue
-        matches = []
-        for label in labels:
-            loc = page.get_by_label(label, exact=True)
-            for i in range(loc.count()):
-                item = loc.nth(i)
-                if item.is_visible() and item.is_enabled():
-                    # Deduplicate aliases that resolve to the same DOM control.
-                    if not any(item.evaluate('(e, other) => e === other', old.element_handle()) for old in matches):
-                        matches.append(item)
-        if len(matches) != 1:
-            pending.append(key + ': kolom tidak ditemukan/ambigu')
-            continue
-        control = matches[0]
-        tag, kind = control.evaluate('(e) => [e.tagName.toLowerCase(), e.type || ""]')
-        if tag not in ('input', 'textarea', 'select') or kind in ('checkbox', 'radio', 'file', 'hidden', 'submit', 'button'):
-            pending.append(key + ': pilih secara manual')
-            continue
-        try:
-            current = control.input_value()
-            if current and current != value:
-                pending.append(key + ': sudah berisi nilai berbeda; tidak ditimpa')
-                continue
-            if tag == 'select':
-                control.select_option(label=value, timeout=3000)
-            else:
-                control.fill(value, timeout=3000)
-            if tag != 'select' and control.input_value() != value:
-                raise ValueError('nilai tidak tersimpan pada kolom')
-            done.append(key)
-        except Exception:
-            pending.append(key + ': perlu diperiksa di browser')
-    for key, token in (('audio', 'audio'), ('cover', 'image')):
-        if cancelled.is_set():
-            break
-        # Do not infer by input order: multiple upload controls must stay manual.
-        candidates = []
-        inputs = page.locator('input[type=file]')
-        for i in range(inputs.count()):
-            control = inputs.nth(i)
-            accept = (control.get_attribute('accept') or '').lower()
-            extensions = ('.wav', '.flac', '.mp3', '.aiff') if key == 'audio' else ('.png', '.jpg', '.jpeg')
-            if token in accept or any(ext in accept for ext in extensions):
-                candidates.append(control)
-        if len(candidates) != 1:
-            pending.append(key + ': input file tidak ditemukan/ambigu')
-            continue
-        control = candidates[0]
-        if control.evaluate('(e) => e.files.length'):
-            pending.append(key + ': file sudah terpasang; tidak diunggah ulang')
-            continue
-        try:
-            control.set_input_files(job[key], timeout=15000)
-            done.append(key + ' (dipasang; cek hasil pemrosesan SoundOn)')
-        except Exception:
-            pending.append(key + ': gagal memasang file')
-    return done, pending
-
-
 class UploadManager:
     def __init__(self, root, accounts, base, open_account, port_for, ready):
         self.accounts = accounts
@@ -185,7 +103,7 @@ class UploadManager:
             if job.get('status') == 'Memproses':
                 job['status'] = 'Terputus — periksa browser sebelum melanjutkan'
         self.window = tk.Toplevel(root)
-        self.window.title('SoundOn 3.18.9 — Studio unggah')
+        self.window.title('SoundOn 3.19.0 — Studio unggah')
         self.window.geometry('1120x740');self.window.minsize(920,600)
         self.window.configure(bg=BG)
         self.window.protocol('WM_DELETE_WINDOW', self.close)
@@ -364,13 +282,10 @@ class UploadManager:
         account=tk.StringVar(value=next((text for text,aid in choices.items() if data and str(aid)==str(data.get('account_id',''))),next(iter(choices))))
         ttk.Label(metadata,text='Akun tujuan').grid(row=0,column=0,sticky='w')
         ttk.Combobox(metadata,textvariable=account,values=list(choices),state='readonly',width=55).grid(row=0,column=1,sticky='ew',pady=4)
-        specs=[('title','Title / judul lagu'),('artist','Primary artist'),('audio','File lagu'),('cover','Cover art'),('language','Title language'),('genre','Genre'),('songwriter','Songwriter (nama lengkap)'),('english_title','English title (opsional)'),('version','Version (opsional)'),('subgenre','Subgenre (opsional)'),('record_label','Record label (opsional)'),('upc','UPC lama (manual)'),('isrc','ISRC lama (manual)')]
+        specs=[('title','Title / judul lagu'),('artist','Primary artist'),('audio','File lagu'),('cover','Cover art'),('language','Title language'),('genre','Genre'),('songwriter','Songwriter (nama lengkap)'),('english_title','English title (opsional)'),('version','Version (opsional)'),('subgenre','Subgenre (opsional)'),('record_label','Record label (opsional)')]
         for row,(key,label) in enumerate(specs,1):
             ttk.Label(metadata,text=label).grid(row=row,column=0,sticky='w',pady=5)
             variables[key]=tk.StringVar(value=data.get(key,''))
-            if key in ('upc','isrc'):
-                metadata.grid_slaves(row=row,column=0)[0].grid_remove()
-                continue
             ttk.Entry(metadata,textvariable=variables[key],width=55).grid(row=row,column=1,sticky='ew',pady=5)
             if key in ('audio','cover'):
                 def pick(key=key):
@@ -459,7 +374,7 @@ class UploadManager:
             messagebox.showerror('Periksa data',str(ex),parent=self.window);return
         target=job.get('draft_url') or 'https://www.soundon.global/library/publish/single'
         self.open_account(account,target_url=target)
-        self.start(automatic=True,open_target=target)
+        self.start(open_target=target)
 
 
     def reviewed(self):
@@ -469,7 +384,7 @@ class UploadManager:
         if not self.busy and job and messagebox.askyesno('Peninjauan manual','Sudah memeriksa semua data di browser? Ini hanya menandai antrean lokal; tidak mengirim rilis.',parent=self.window):
             job['status']='Selesai diperiksa manual';self.persist()
 
-    def start(self, automatic=True, open_target=None, job=None, unattended=False):
+    def start(self, open_target=None, job=None, unattended=False):
         """unattended=True: dijalankan antrean otomatis (folder pantau) — tanpa dialog; kesalahan
         menjadi status "Perlu tindakan" dan antrean lanjut ke lagu berikutnya."""
         if self.busy:return
@@ -482,8 +397,7 @@ class UploadManager:
             return
         try:
             validate(job,[a['id'] for a in self.accounts])
-            if automatic:
-                validate_automatic(job);validate_recorded_fields(job)
+            validate_automatic(job);validate_recorded_fields(job)
         except (ValueError,OSError) as ex:
             if unattended:
                 job.update(status='Perlu tindakan',report=str(ex));self.persist();return
@@ -494,8 +408,8 @@ class UploadManager:
         if not unattended:
             if not open_target and not self.ready(account):
                 messagebox.showinfo('Buka akun','Klik Buka akun, login, lalu buka formulir unggah lagu sebelum mengisi.',parent=self.window);return
-            last_step='menekan Submit (Submit otomatis aktif)' if self.autosubmit.get() and automatic else 'Submit tidak ditekan'
-            if not open_target and not messagebox.askyesno('Periksa halaman tujuan',f"Pastikan Chrome {account['name']} berada pada draf lagu {job['title']}.\nBot akan mengisi data dan {'menekan Next sampai Review' if automatic else 'berhenti di halaman aktif'}; {last_step}.",parent=self.window):return
+            last_step='menekan Submit (Submit otomatis aktif)' if self.autosubmit.get() else 'Submit tidak ditekan'
+            if not open_target and not messagebox.askyesno('Periksa halaman tujuan',f"Pastikan Chrome {account['name']} berada pada draf lagu {job['title']}.\nBot akan mengisi data dan menekan Next sampai Review; {last_step}.",parent=self.window):return
         launched=False
         if unattended:
             open_target=job.get('draft_url') or 'https://www.soundon.global/library/publish/single'
@@ -503,7 +417,7 @@ class UploadManager:
                 if not self.open_account(account,target_url=open_target):
                     job.update(status='Perlu tindakan',report='Chrome akun tidak bisa dibuka.');self.persist();return
                 launched=True
-        auto_submit=bool(automatic and self.autosubmit.get())
+        auto_submit=bool(self.autosubmit.get())
         # Event baru per proses: proses lama yang dilepas pengaman macet tetap berstatus dihentikan
         # walaupun proses berikutnya dimulai.
         run={'job':job['id'],'cancel':threading.Event(),'beat':time.monotonic(),'stop_at':None}
@@ -569,36 +483,30 @@ class UploadManager:
                         else:raise NeedsAttention('Formulir unggah belum siap. Selesaikan login lalu tekan Buka akun lagi.')
                     if snapshot.get('draft_url') and snapshot['draft_url']!=page.url:
                         raise ValueError('Halaman berbeda dari draf yang dicatat untuk lagu ini. Buka draf sebelumnya sebelum melanjutkan.')
-                    if automatic:
-                        initial_stage=Flow(page,snapshot,cancel,lambda text:None).stage()
-                        if initial_stage=='unknown':raise ValueError('Tahap formulir belum dikenali. Periksa bahasa dan halaman unggah; dukungan Indonesia/Inggris aktif. Kirim screenshot halaman penuh beserta catatan ini jika masih berhenti.')
+                    initial_stage=Flow(page,snapshot,cancel,lambda text:None).stage()
+                    if initial_stage=='unknown':raise ValueError('Tahap formulir belum dikenali. Periksa bahasa dan halaman unggah; dukungan Indonesia/Inggris aktif. Kirim screenshot halaman penuh beserta catatan ini jika masih berhenti.')
                     put(('draft',snapshot['id'],page.url))
-                    if automatic:
-                        notes=[]
-                        def log(text):
-                            beat();notes.append(text);put(('log',snapshot['id'],text))
-                        flow=Flow(page,snapshot,cancel,log,beat)
-                        try:
-                            status=flow.run()
-                            if status=='Siap ditinjau' and auto_submit:
-                                put(('draft',snapshot['id'],page.url))
-                                status=submit_release(flow,lambda:put(('submitclick',snapshot['id'],datetime.now().strftime('%Y-%m-%d %H:%M:%S'))))
-                                report='\n'.join(notes)+'\nRilis dikirim ke SoundOn (Submit otomatis).'
-                            else:
-                                report='\n'.join(notes)+'\nPeriksa seluruh informasi di Review. Tidak ada Submit yang ditekan.'
-                        except NeedsAttention as ex:
-                            status='Perlu tindakan'
-                            report='\n'.join(notes)+'\n'+str(ex)
-                        if status!='Terkirim':
+                    notes=[]
+                    def log(text):
+                        beat();notes.append(text);put(('log',snapshot['id'],text))
+                    flow=Flow(page,snapshot,cancel,log,beat)
+                    try:
+                        status=flow.run()
+                        if status=='Siap ditinjau' and auto_submit:
                             put(('draft',snapshot['id'],page.url))
-                        elif own_page is not None:
-                            try:own_page.close()
-                            except Exception:pass
-                        put((snapshot['id'],status,report))
-                    else:
-                        done,pending=fill_visible_form(page,snapshot,cancel)
-                        report='Terisi: '+(', '.join(done) or 'belum ada')+'\nPerlu manual: '+('; '.join(pending) or 'cek hasil di browser')
-                        put((snapshot['id'],'Periksa halaman aktif',report))
+                            status=submit_release(flow,lambda:put(('submitclick',snapshot['id'],datetime.now().strftime('%Y-%m-%d %H:%M:%S'))))
+                            report='\n'.join(notes)+'\nRilis dikirim ke SoundOn (Submit otomatis).'
+                        else:
+                            report='\n'.join(notes)+'\nPeriksa seluruh informasi di Review. Tidak ada Submit yang ditekan.'
+                    except NeedsAttention as ex:
+                        status='Perlu tindakan'
+                        report='\n'.join(notes)+'\n'+str(ex)
+                    if status!='Terkirim':
+                        put(('draft',snapshot['id'],page.url))
+                    elif own_page is not None:
+                        try:own_page.close()
+                        except Exception:pass
+                    put((snapshot['id'],status,report))
             except Exception as ex:
                 if 'page' in locals() and page is not None and ('initial_stage' not in locals() or initial_stage!='unknown'):
                     try:put(('draft',snapshot['id'],page.url))
@@ -697,7 +605,7 @@ class UploadManager:
             job=next((j for j in self.jobs if self.auto_candidate(j)),None)
             if job is not None:
                 if self.tree.exists(job['id']):self.tree.selection_set(job['id']);self.tree.see(job['id'])
-                self.start(automatic=True,job=job,unattended=True)
+                self.start(job=job,unattended=True)
 
     def import_folder(self):
         ids=[a['id'] for a in self.accounts]

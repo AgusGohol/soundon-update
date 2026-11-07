@@ -267,3 +267,11 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - "Sembunyikan Chrome sinkron" (aktif bawaan): Chrome akun yang tertutup dibuka tanpa jendela sama sekali, lalu ditutup lagi setelah dibaca. Bila Chrome akun sedang Anda pakai, sinkron memakai jendela terpisah yang langsung diperkecil, tidak lagi menambah tab di jendela Anda.
 - Bila SoundOn tidak mau dibuka tanpa jendela (akun tampak belum login atau halaman tidak termuat), akun itu otomatis dibaca ulang dengan Chrome diperkecil seperti sebelumnya. Opsi ini bisa dimatikan bila perlu.
 - Cara membaca data tidak berubah: tetap membaca halaman SoundOn yang tampil.
+
+
+3.19.0: Tampilan lebih hidup dan fitur yang tidak terpakai dihapus.
+- Dashboard: sapaan sesuai waktu dan tanggal, label ringkas (jumlah akun, Chrome aktif, akun yang belum punya data periode ini), grafik tren 6 bulan pada kartu Streams dan Pendengar, keterangan kecil di setiap kartu (waktu sinkron saldo, Chrome aktif), dan kartu menyala saat disorot. Ringkasan Inventaris HP dipadatkan menjadi satu baris sehingga tabel akun lebih lega.
+- Dihapus: Penerbit otomatis (token GitHub; rilis kini diterbitkan GitHub Actions), Kredensial login, tampilan "Kolom Negara", dan platform yang tidak bisa disinkron (pilihan platform kini Semua Platform dan Spotify).
+- Penghasilan manual per artis dihapus. "Atur Artis & Pemilik" tetap ada untuk menambah, mengganti nama/pemilik, dan menghapus artis. Saldo tetap dibaca lewat Sinkron. Data lama di file tidak dihapus.
+- Tombol ganda dirapikan: ganti tema hanya di Pengaturan > Tampilan; menjalankan/mengulang/menghentikan sinkron hanya dari menu Sinkron; tambah kategori di Pengaturan > Kategori Negara; Tambah Akun di sidebar; jumlah HP/artis/lagu hanya lewat "Atur jumlah HP, artis & lagu".
+- Studio unggah: mode isi manual yang tidak pernah dipakai dan kolom UPC/ISRC tersembunyi dibuang. Alur otomatis tidak berubah.

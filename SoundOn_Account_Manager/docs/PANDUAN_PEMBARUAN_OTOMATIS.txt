@@ -63,22 +63,11 @@ Membuat paket sendiri (opsional, perlu Python):
 Hasil ada di folder dist\. Versi diambil dari APP_VERSION di soundon_dashboard.py.
 
 
-PENERBITAN OTOMATIS (sejak 3.16.0)
-----------------------------------
-Di komputer admin saja:
-  1. Buat token di GitHub > Settings > Developer settings > Personal access tokens >
-     Fine-grained tokens > Generate new token.
-       - Repository access: Only select repositories > AgusGohol/soundon-update
-       - Permissions > Repository permissions > Contents: Read and write
-  2. Aplikasi > Pengaturan > Pembaruan > "Atur token penerbit…", tempel token, Simpan & uji.
-     Token disimpan di %USERPROFILE%\.soundon_github_token (bisa dihapus dari jendela yang sama,
-     atau dicabut di GitHub kapan saja).
-  3. Folder %USERPROFILE%\SoundOnRilis\masuk dibuat otomatis. Setiap paket rilis
-     (SoundOn_Update_<versi>.zip + manifest.json) yang masuk ke folder itu diperiksa lalu
-     diterbitkan ke GitHub dalam ±1 menit selama aplikasi admin terbuka.
-     Berhasil -> SoundOnRilis\terbit\<versi>, gagal -> SoundOnRilis\gagal (alasan di log_terbit.txt).
+PENERBITAN OTOMATIS
+-------------------
+Sejak 3.16.1 rilis diterbitkan otomatis oleh GitHub Actions di repo AgusGohol/soundon-update
+setiap kali versi dinaikkan dan kode di-push. Tidak perlu token di komputer mana pun.
+(Fitur "Penerbit otomatis" dengan token GitHub di Pengaturan dihapus pada 3.19.0.)
 
 Klien memasang versi baru saat aplikasi dibuka, dan memeriksa tiap 20 menit selama
 aplikasi terbuka (hitung mundur 30 detik, bisa ditunda; tidak saat sinkron/unggah).
-
-Baris perintah (opsional): python tools/buat_rilis.py lalu python tools/terbitkan_rilis.py

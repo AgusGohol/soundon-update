@@ -1,73 +1,40 @@
-"""Manual monthly artist earnings, stored as integer rupiah in each account."""
-import re
-from datetime import date
+"""Artis per akun dan pemiliknya (artists[].owner) di accounts.json.
+
+Penghasilan manual per bulan dihapus pada 3.19.0; data lama ('earnings') dibiarkan di file."""
 
 
-def validate_month(month):
-    if not re.fullmatch(r'\d{4}-\d{2}', month):
-        raise ValueError('Pilih bulan dan tahun yang valid.')
-    date.fromisoformat(month + '-01')
-    return month
-
-
-def parse_rupiah(raw):
-    raw = str(raw).strip()
-    raw = re.sub(r'^Rp\s*', '', raw, flags=re.I)
-    if re.fullmatch(r'\d+', raw):
-        return int(raw)
-    if re.fullmatch(r'\d{1,3}(?:\.\d{3})+', raw):
-        return int(raw.replace('.', ''))
-    raise ValueError('Isi rupiah bulat, misalnya 5000000 atau 5.000.000. Tanpa minus/desimal.')
-
-
-def save_artist(account, artist_id, name, owner, month, amount):
-    name, owner = name.strip(), owner.strip()
+def save_artist(account, artist_id, name, owner):
+    name, owner = ' '.join(name.split()), ' '.join(owner.split())
     if not name or not owner:
         raise ValueError('Nama artis dan pemilik wajib diisi.')
-    validate_month(month)
-    amount = parse_rupiah(amount)
     artists = account.get('artists', [])
     artist = next((x for x in artists if x['id'] == artist_id), None)
     if any(x['name'].casefold() == name.casefold() and x is not artist for x in artists):
         raise ValueError('Nama artis sudah ada pada akun ini. Pilih artis tersebut untuk mengubahnya.')
     if artist is None:
-        artist = {'id': max((x['id'] for x in artists), default=0) + 1,
-                  'name': name, 'owner': owner, 'earnings': {}}
+        artist = {'id': max((x['id'] for x in artists), default=0) + 1, 'name': name, 'owner': owner}
         artists.append(artist)
         account['artists'] = artists
     artist.update(name=name, owner=owner)
-    artist.setdefault('earnings', {})[month] = amount
     return artist
 
 
-def month_total(account, month):
-    return sum(x.get('earnings', {}).get(month, 0) for x in account.get('artists', []))
-
-
-def rupiah(amount):
-    return 'Rp' + f'{amount:,}'.replace(',', '.')
-
-
-def owner_groups(accounts, month, owners=()):
+def owner_groups(accounts, owners=()):
     """Group registered artists across accounts; keep undetailed accounts reachable."""
     groups = {}
     for name in owners:
         name = ' '.join(str(name).split())
         if name:
-            groups.setdefault(name.casefold(), {'owner': name, 'entries': [], 'accounts': {}, 'total': 0})
+            groups.setdefault(name.casefold(), {'owner': name, 'entries': [], 'accounts': {}})
     for account in accounts:
         artists = account.get('artists', [])
         entries = artists or [None]
         for artist in entries:
             owner = ' '.join(str(artist.get('owner', '') if artist else '').split())
             key = owner.casefold() if owner else None
-            group = groups.setdefault(key, {'owner': owner or 'Belum ditentukan',
-                                            'entries': [], 'accounts': {}, 'total': 0})
-            amount = artist.get('earnings', {}).get(month) if artist else None
-            group['entries'].append({'account': account, 'artist': artist, 'amount': amount})
+            group = groups.setdefault(key, {'owner': owner or 'Belum ditentukan', 'entries': [], 'accounts': {}})
+            group['entries'].append({'account': account, 'artist': artist})
             group['accounts'][str(account['id'])] = account
-            if amount is not None:
-                group['total'] += amount
     return sorted(groups.values(), key=lambda g: (g['owner']=='Belum ditentukan', g['owner'].casefold()))
 
 
@@ -102,7 +69,7 @@ def assign_artists(accounts, choices, owner):
         if item['artist_id'] is None:
             artists = account.setdefault('artists', [])
             artists.append({'id': max((x['id'] for x in artists), default=0)+1,
-                            'name': item['name'], 'owner': owner, 'earnings': {}})
+                            'name': item['name'], 'owner': owner})
         else:
             artist = next(x for x in account['artists'] if x['id'] == item['artist_id'])
             artist['owner'] = owner

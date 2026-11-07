@@ -87,8 +87,8 @@ def main():
     print('Manifest   :', out / 'manifest.json')
     print('SHA-256    :', sha)
     print('Catatan    :', manifest['notes'])
-    print('\nTerbitkan otomatis: python tools/terbitkan_rilis.py')
-    print('atau unggah KEDUA file ke GitHub > Releases > Draft a new release, tag v%s, lalu Publish.' % version)
+    print('\nRilis diterbitkan otomatis oleh GitHub Actions setelah push;')
+    print('cadangan manual: unggah KEDUA file ke GitHub > Releases > Draft a new release, tag v%s, lalu Publish.' % version)
 
 
 if __name__ == '__main__':

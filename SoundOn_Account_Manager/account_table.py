@@ -8,8 +8,7 @@ ringan; header kolom tetap di atas saat digulir.
 import tkinter as tk
 from tkinter import ttk
 
-import ui_theme as UI
-from ui_theme import (rounded_points, RED, INK, TINT, THEME, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, FONT, FONT_SEMI,
+from ui_theme import (rounded_points, RED, INK, TINT, THEME, PANEL, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, FONT,
                       mix, rounded_rect, draw_icon, text_width)
 
 # (judul, lebar minimum, bobot, kunci)
@@ -75,7 +74,6 @@ class AccountTable(tk.Frame):
         self.body.bind('<Motion>', self._on_motion)
         self.body.bind('<Leave>', lambda e: self._set_hover(None, None))
         self.body.bind('<ButtonRelease-1>', self._on_click)
-        self.on_compact_change = None
 
     # ------------------------------------------------------------ data
     def set_rows(self, rows, empty_text='Belum ada akun.'):
@@ -330,6 +328,3 @@ class AccountTable(tk.Frame):
         if x <= event.x <= x + w:
             all_on = all(str(r['account']['id']) in self.selected for r in self.rows)
             self.set_all(not all_on)
-
-    def scroll_top(self):
-        self.body.yview_moveto(0)

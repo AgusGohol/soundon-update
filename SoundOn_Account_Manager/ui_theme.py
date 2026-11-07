@@ -8,6 +8,7 @@ import tkinter.font as tkfont
 from tkinter import ttk
 
 # ---------------------------------------------------------------- palet & tema
+import datetime as _dt
 import json as _json
 import os as _os
 
@@ -437,6 +438,92 @@ def pill(parent, text, color=GREEN, bg=None, font_size=9):
     c.create_oval(10, h / 2 - 3, 16, h / 2 + 3, fill=color, outline='')
     c.create_text(21, h / 2, text=text, anchor='w', fill=mix(color, TINT, 0.3 if THEME == 'dark' else 0.25), font=f)
     return c
+
+
+class Sparkline(tk.Canvas):
+    """Grafik garis kecil (tren) dengan area lembut di bawahnya. Nilai None dilewati."""
+
+    def __init__(self, parent, color=PURPLE, bg=None, width=96, height=34):
+        self._color = color
+        super().__init__(parent, width=width, height=height, bg=bg or bg_of(parent), highlightthickness=0, bd=0)
+        self._sw, self._sh = width, height   # bukan _w: itu nama jendela internal Tk
+
+    def set(self, values):
+        self.delete('all')
+        pts = [(i, v) for i, v in enumerate(values) if v is not None]
+        w, h, pad = self._sw, self._sh, 4
+        if len(pts) < 2:
+            self.create_line(pad, h - pad, w - pad, h - pad, fill=mix(self.cget('bg'), self._color, 0.35), dash=(3, 3))
+            return
+        lo, hi = min(v for _, v in pts), max(v for _, v in pts)
+        span = (hi - lo) or 1
+        last = max(len(values) - 1, 1)
+        xy = [(pad + (w - 2 * pad) * i / last, h - pad - (h - 2 * pad) * (v - lo) / span) for i, v in pts]
+        area = [xy[0][0], h] + [c for p in xy for c in p] + [xy[-1][0], h]
+        self.create_polygon(area, fill=mix(self.cget('bg'), self._color, 0.16), outline='')
+        self.create_line(*[c for p in xy for c in p], fill=self._color, width=2, smooth=True, capstyle='round')
+        x, y = xy[-1]
+        self.create_oval(x - 3, y - 3, x + 3, y + 3, fill=self._color, outline=self.cget('bg'), width=1.5)
+
+
+def hover_highlight(widget, base, hi):
+    """Kartu menyala lembut saat kursor di atasnya (semua anak berlatar `base` ikut berganti)."""
+    state = {'on': False}
+
+    def paint(color):
+        stack = [widget]
+        while stack:
+            w = stack.pop()
+            stack.extend(w.winfo_children())
+            try:
+                if w.cget('bg') in (base, hi):
+                    w.configure(bg=color)
+            except tk.TclError:
+                pass
+
+    def inside():
+        try:
+            w = widget.winfo_containing(*widget.winfo_pointerxy())
+        except (tk.TclError, KeyError):
+            return False
+        while w is not None:
+            if w is widget:
+                return True
+            w = w.master
+        return False
+
+    def enter(_):
+        if not state['on']:
+            state['on'] = True
+            paint(hi)
+
+    def leave(_):
+        def check():
+            if state['on'] and not inside():
+                state['on'] = False
+                paint(base)
+        try:
+            widget.after(40, check)
+        except tk.TclError:
+            pass
+
+    stack = [widget]
+    while stack:
+        w = stack.pop()
+        stack.extend(w.winfo_children())
+        w.bind('<Enter>', enter, add='+')
+        w.bind('<Leave>', leave, add='+')
+
+
+def greeting(now=None):
+    hour = (now or _dt.datetime.now()).hour
+    if 4 <= hour < 11:
+        return 'Selamat pagi'
+    if 11 <= hour < 15:
+        return 'Selamat siang'
+    if 15 <= hour < 18:
+        return 'Selamat sore'
+    return 'Selamat malam'
 
 
 # ---------------------------------------------------------------- kartu

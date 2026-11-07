@@ -1,25 +1,21 @@
 """SoundOn multi-account dashboard; optional read-only visible-page capture."""
-import csv
 import calendar
 import json
 import os
 import shutil
 import subprocess
 import re
-import socket
 import threading
 import time
 import urllib.request
 import sys
-import tempfile
-import hashlib
 import urllib.parse
 import base64
 import tkinter as tk
-from artist_finance import save_artist, month_total, rupiah, owner_groups, available_artists, assign_artists, rename_owner, remove_owner
+from artist_finance import save_artist, owner_groups, available_artists, assign_artists, rename_owner, remove_owner
 
 # Izin perangkat SoundOn
-from device_license import check_license, device_id
+from device_license import check_license
 from datetime import date, datetime, timedelta
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
@@ -40,8 +36,8 @@ os.makedirs(BASE, exist_ok=True)
 import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
-                      FONT, FONT_SEMI, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.18.9'
+                      FONT, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
+APP_VERSION='3.19.0'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -476,63 +472,46 @@ def edit_account_counts(a):
     button(actions,'Batal',w.destroy,variant='ghost').pack(side='right',padx=(0,9))
     w.bind('<Escape>',lambda e:w.destroy())
 
-def artist_month_picker(parent, variable, callback=None):
-    """Pemilih bulan penghasilan (nilai YYYY-MM)."""
-    return MonthButton(parent, variable, callback)
-
-
-def edit_artist_finance(a,default_owner="",target_artist=None):
+def edit_artists(a,default_owner="",target_artist=None):
+    """Artis pada akun ini beserta pemiliknya (tambah, ubah nama/pemilik, hapus)."""
     import copy
-    w=tk.Toplevel(root);w.title('Pemilik & Penghasilan Artis');w.geometry('850x660')
-    w.minsize(800,620);w.configure(bg=PANEL);w.transient(root);w.grab_set()
-    label(w,'Pemilik & Penghasilan Artis',15,bold=True).pack(anchor='w',padx=22,pady=(20,6))
-    label(w,a['name']+' · Input manual dalam rupiah',10,DIM).pack(anchor='w',padx=22)
-    period=tk.StringVar(value=artist_month_var.get())
-    line=tk.Frame(w,bg=PANEL);line.pack(fill='x',padx=22,pady=12)
-    label(line,'Bulan penghasilan:',10,DIM).pack(side='left')
+    w=tk.Toplevel(root);w.title('Artis & Pemilik');w.geometry('760x560')
+    w.minsize(700,500);w.configure(bg=PANEL);w.transient(root);w.grab_set()
+    label(w,'Artis & Pemilik',15,bold=True).pack(anchor='w',padx=22,pady=(20,6))
+    label(w,a['name']+' · Saldo akun dibaca otomatis lewat Sinkron',10,DIM).pack(anchor='w',padx=22,pady=(0,12))
     selected=[target_artist]
     def populate():
         table.delete(*table.get_children())
         for artist in a.get('artists',[]):
-            amount=artist.get('earnings',{}).get(period.get())
-            table.insert('', 'end',iid=str(artist['id']),values=(artist['name'],artist['owner'],
-                rupiah(amount) if amount is not None else 'Belum diisi'))
+            table.insert('', 'end',iid=str(artist['id']),values=(artist['name'],artist.get('owner') or 'Belum ditentukan'))
         if selected[0] is not None and table.exists(str(selected[0])):
             table.selection_set(str(selected[0]))
             choose()
-        else:
-            amount_var.set('')
-        total_var.set('Total bulan ini: '+rupiah(month_total(a,period.get())))
-    artist_month_picker(line,period,populate).pack(side='left',padx=9)
     tablebox=tk.Frame(w,bg=PANEL);tablebox.pack(fill='both',expand=True,padx=22)
-    table=ttk.Treeview(tablebox,columns=('artist','owner','income'),show='headings',selectmode='browse',height=5,style='Dark.Treeview')
-    for key,title,width in [('artist','Nama artis',300),('owner','Pemilik',210),('income','Penghasilan (IDR)',180)]:
-        table.heading(key,text=title);table.column(key,width=width,minwidth=100,stretch=True)
+    table=ttk.Treeview(tablebox,columns=('artist','owner'),show='headings',selectmode='browse',height=6,style='Dark.Treeview')
+    for key,title,width in [('artist','Nama artis',360),('owner','Pemilik',260)]:
+        table.heading(key,text=title);table.column(key,width=width,minwidth=120,stretch=True)
     scroll=ttk.Scrollbar(tablebox,orient='vertical',command=table.yview,style='Dark.Vertical.TScrollbar')
     table.configure(yscrollcommand=scroll.set);scroll.pack(side='right',fill='y');table.pack(fill='both',expand=True)
-    total_var=tk.StringVar();tk.Label(w,textvariable=total_var,bg=PANEL,fg=GREEN,font=(FONT,11,'bold')).pack(anchor='w',padx=22,pady=8)
-    form=tk.Frame(w,bg=PANEL);form.pack(fill='x',padx=22,pady=6)
-    name_var=tk.StringVar();owner_var=tk.StringVar(value=default_owner);amount_var=tk.StringVar()
-    for title,var in [('Nama artis',name_var),('Pemilik artis',owner_var),('Penghasilan bulan terpilih (Rp)',amount_var)]:
+    form=tk.Frame(w,bg=PANEL);form.pack(fill='x',padx=22,pady=(14,6))
+    name_var=tk.StringVar();owner_var=tk.StringVar(value=default_owner)
+    for title,var in [('Nama artis',name_var),('Pemilik artis',owner_var)]:
         row=tk.Frame(form,bg=PANEL);row.pack(fill='x',pady=4)
-        label(row,title,10,DIM,width=29,anchor='w').pack(side='left')
+        label(row,title,10,DIM,width=16,anchor='w').pack(side='left')
         if title=='Pemilik artis':
             ttk.Combobox(row,textvariable=var,values=owner_names(),style='Dark.TCombobox',font=(FONT,11)).pack(side='left',fill='x',expand=True,ipady=5)
         else:
             tk.Entry(row,textvariable=var,bg=CARD,fg=WHITE,insertbackground=WHITE,relief='flat',font=(FONT,11)).pack(side='left',fill='x',expand=True,ipady=5)
-    label(w,'Contoh nominal: 5000000 atau 5.000.000. Pemilik berlaku untuk seluruh riwayat artis.',9,DIM).pack(anchor='w',padx=22,pady=6)
     def choose(event=None):
         selection=table.selection()
         if not selection:return
         selected[0]=int(selection[0])
         artist=next(x for x in a.get('artists',[]) if x['id']==selected[0])
-        name_var.set(artist['name']);owner_var.set(artist['owner'])
-        amount_var.set(str(artist.get('earnings',{}).get(period.get(),'')))
+        name_var.set(artist['name']);owner_var.set(artist.get('owner',''))
     table.bind('<<TreeviewSelect>>',choose)
     def new():
         selected[0]=None
-        for var in (name_var,owner_var,amount_var):var.set('')
-        owner_var.set(default_owner)
+        name_var.set('');owner_var.set(default_owner)
         if table.selection():table.selection_remove(*table.selection())
     def commit(change):
         before=copy.deepcopy(a)
@@ -548,48 +527,39 @@ def edit_artist_finance(a,default_owner="",target_artist=None):
         populate();refresh();return True
     def save():
         def change():
-            artist=save_artist(a,selected[0],name_var.get(),owner_var.get(),period.get(),amount_var.get())
+            artist=save_artist(a,selected[0],name_var.get(),owner_var.get())
             selected[0]=artist['id']
-        commit(change)
-    def remove_month():
-        if selected[0] is None:return
-        if not messagebox.askyesno('Hapus penghasilan','Hapus penghasilan artis terpilih untuk '+period.get()+'?',parent=w):return
-        def change():
-            artist=next(x for x in a['artists'] if x['id']==selected[0])
-            artist.get('earnings',{}).pop(period.get(),None)
         commit(change)
     def remove_artist():
         if selected[0] is None:return
-        if not messagebox.askyesno('Hapus artis','Hapus artis terpilih beserta seluruh riwayat penghasilannya?',parent=w):return
+        if not messagebox.askyesno('Hapus artis','Hapus artis terpilih dari akun ini?',parent=w):return
         target=selected[0]
         def change():a['artists']=[x for x in a['artists'] if x['id']!=target]
         if commit(change):new()
     actions=tk.Frame(w,bg=PANEL);actions.pack(side='bottom',fill='x',padx=22,pady=(10,18),before=tablebox)
-    for title,fn in [('Tambah Artis',new),('Simpan',save),('Hapus Bulan',remove_month),('Hapus Artis',remove_artist),('Tutup',w.destroy)]:
+    for title,fn in [('Tambah Artis',new),('Simpan',save),('Hapus Artis',remove_artist),('Tutup',w.destroy)]:
         button(actions,title,fn,title=='Simpan').pack(side='left',padx=(0,7))
     populate()
 
 
-def render_artist_finance(parent,a):
+def render_artists(parent,a):
     section=tk.Frame(parent,bg=CARD);section.pack(fill='x',pady=(12,0))
     top=tk.Frame(section,bg=CARD);top.pack(fill='x',padx=14,pady=(10,6))
-    label(top,'PEMILIK & PENGHASILAN · '+artist_month_var.get(),9,DIM,bold=True).pack(anchor='w')
-    button(top,'Atur Pemilik & Penghasilan',lambda:edit_artist_finance(a)).pack(anchor='w',pady=(6,0))
+    label(top,'ARTIS & PEMILIK',9,DIM,bold=True).pack(side='left')
+    button(top,'Atur Artis & Pemilik',lambda:edit_artists(a),font_size=9,height=28).pack(side='right')
     rows=tk.Frame(section,bg=CARD);rows.pack(fill='x',padx=14,pady=(0,10))
-    for col,weight in enumerate([3,2,2]):rows.columnconfigure(col,weight=weight,uniform='artist')
-    for col,title in enumerate(['Nama artis','Pemilik','Penghasilan (IDR)']):
+    for col,weight in enumerate([3,2]):rows.columnconfigure(col,weight=weight,uniform='artist')
+    for col,title in enumerate(['Nama artis','Pemilik']):
         label(rows,title,10,DIM,bold=True,anchor='w').grid(row=0,column=col,sticky='ew',padx=5,pady=5)
     artists=a.get('artists',[])
     for row,artist in enumerate(artists,1):
-        amount=artist.get('earnings',{}).get(artist_month_var.get())
-        for col,value in enumerate([artist['name'],artist['owner'],rupiah(amount) if amount is not None else 'Belum diisi']):
-            cell=label(rows,value,11,GREEN if col==2 and amount is not None else WHITE,anchor='w')
+        for col,value in enumerate([artist['name'],artist.get('owner') or 'Belum ditentukan']):
+            cell=label(rows,value,11,WHITE,anchor='w')
             cell.configure(wraplength=230,justify='left')
             cell.grid(row=row,column=col,sticky='ew',padx=5,pady=5)
             cell.bind('<Configure>',lambda e,l=cell:l.configure(wraplength=max(50,e.width-6)))
     if not artists:
-        label(rows,'Belum ada data artis.',10,DIM).grid(row=1,column=0,columnspan=3,sticky='w',padx=5,pady=7)
-    label(section,'Total bulan terpilih: '+rupiah(month_total(a,artist_month_var.get())),11,GREEN,bold=True).pack(anchor='w',padx=19,pady=(0,12))
+        label(rows,'Belum ada data artis.',10,DIM).grid(row=1,column=0,columnspan=2,sticky='w',padx=5,pady=7)
 
 
 def rename(a):
@@ -1342,7 +1312,7 @@ def edit(a):
     period=check_range()
     if not period:return
     start,end=period; plat=platform_var.get(); old=latest(a,start,end,plat)
-    w=tk.Toplevel(root);w.title('Data SoundOn — '+a['name']);w.geometry('510x735');w.configure(bg=PANEL);w.transient(root);w.grab_set()
+    w=tk.Toplevel(root);w.title('Data SoundOn — '+a['name']);w.geometry('510x600');w.configure(bg=PANEL);w.transient(root);w.grab_set()
     label(w,'Input data dari SoundOn',15,bold=True).pack(anchor='w',padx=24,pady=(22,5))
     label(w,f'{start} s.d. {end} · {plat}',10,DIM).pack(anchor='w',padx=24,pady=(0,8))
     label(w,'Angka periode harus sesuai filter. Saldo adalah saldo saat ini.',9,DIM,wraplength=450,justify='left').pack(anchor='w',padx=24,pady=(0,14))
@@ -1356,29 +1326,12 @@ def edit(a):
     label(currency_row,'Mata uang saldo',10,DIM).pack(anchor='w')
     currency_var=tk.StringVar(value=a.get('currency','IDR'))
     ttk.Combobox(currency_row,textvariable=currency_var,values=['IDR','USD'],state='readonly',width=15,style='Dark.TCombobox').pack(anchor='w',pady=4)
-    hp_row=tk.Frame(w,bg=PANEL);hp_row.pack(fill='x',padx=24,pady=7)
-    label(hp_row,'Jumlah HP untuk akun ini',10,DIM).pack(anchor='w')
-    hp_var=tk.StringVar(value=str(a.get('phone_count',0)))
-    tk.Entry(hp_row,textvariable=hp_var,bg=CARD,fg=WHITE,insertbackground=WHITE,
-             relief='flat',font=(FONT,11)).pack(fill='x',ipady=8,pady=(5,0))
-    catalog_vars={}
-    for title,key in [('Jumlah artis','artist_count'),('Jumlah lagu','song_count')]:
-        row=tk.Frame(w,bg=PANEL);row.pack(fill='x',padx=24,pady=6)
-        label(row,title,10,DIM).pack(anchor='w')
-        v=tk.StringVar(value=str(a.get(key,0)));catalog_vars[key]=v
-        tk.Entry(row,textvariable=v,bg=CARD,fg=WHITE,insertbackground=WHITE,
-            relief='flat',font=(FONT,11)).pack(fill='x',ipady=7,pady=(4,0))
+    label(w,'Jumlah HP, artis & lagu diatur lewat ⋯ > Atur jumlah HP, artis & lagu.',9,MUTED).pack(anchor='w',padx=24,pady=(6,0))
     def save_data():
         try:
             values={k:int(v.get().strip().replace('.','').replace(',','').replace(' ','')) for k,v in fields.items() if k in ('streams','listeners')}
             values['balance']=parse_amount(fields['balance'].get(),currency_var.get())
             if any(v<0 for v in values.values()):raise ValueError()
-            hp_text=hp_var.get().strip()
-            if not hp_text.isdecimal():raise ValueError()
-            hp_value=int(hp_text)
-            if hp_value>100000:raise ValueError()
-            catalog_values={k:int(v.get().strip()) for k,v in catalog_vars.items() if v.get().strip().isdecimal()}
-            if len(catalog_values)!=2 or any(n>1000000 for n in catalog_values.values()):raise ValueError()
         except ValueError:
             messagebox.showerror('Angka tidak valid','Isi angka positif. Contoh saldo IDR: 4.160.229 atau 4160229; USD: 12,50 atau 12.50.',parent=w);return
         now=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -1386,7 +1339,6 @@ def edit(a):
         balance_changed=abs(values['balance']-float(a.get('balance') or 0))>0.004 or currency_var.get()!=a.get('currency','IDR')
         a['balance']=values['balance'];a['currency']=currency_var.get()
         if balance_changed or not a.get('balance_updated'):a['balance_updated']=now
-        a['phone_count']=hp_value;a.update(catalog_values)
         persist();w.destroy();refresh()
     button(w,'Simpan data periode',save_data,True).pack(anchor='e',padx=24,pady=18)
 
@@ -1429,6 +1381,8 @@ def short_name(text,limit=26):
     text=str(text)
     return text if len(text)<=limit else text[:limit-1].rstrip()+'…'
 
+HARI=['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu']
+BULAN=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
 def short_time(value):
     try:return datetime.strptime(str(value)[:19],'%Y-%m-%d %H:%M:%S').strftime('%d/%m %H:%M')
     except (TypeError,ValueError):return str(value or '—')[:16]
@@ -1459,18 +1413,10 @@ def refresh():
     sidebar_connected.set(str(connected))
     last_update.set('Diperbarui lokal: '+datetime.now().strftime('%d/%m/%Y %H:%M'))
     status_var.set(f'{len(data)} akun ditampilkan  ·  {sum(bool(r) for a,r in data)} akun memiliki data periode ini  ·  Streams bertanda ≈ adalah perkiraan')
-    if view_var.get()=='Kolom Negara':
-        if account_table.winfo_manager():account_table.pack_forget()
-        if sel_bar.winfo_manager():sel_bar.pack_forget()
-        if not country_box.winfo_manager():country_box.pack(fill='both',expand=True)
-        clear(rows)
-        for _c in range(12):rows.grid_columnconfigure(_c,weight=0,uniform='',minsize=0)
-        render_country_columns(data)
-        totals_var.set(f'TOTAL  ·  Streams: {number(total_stream)}   ·   Pendengar: {number(total_listeners)}   ·   Saldo: {total_balance}')
-        _sync_pages()
-        return
+    now=datetime.now()
+    greeting_var.set(f'{UI.greeting(now)}  ·  {HARI[now.weekday()]}, {now.day} {BULAN[now.month-1]} {now.year}')
+    update_insights(len(data),sum(bool(r) for a,r in data),connected)
     if sel_bar.winfo_manager() and not account_table.selected:sel_bar.pack_forget()
-    if country_box.winfo_manager():country_box.pack_forget();clear(rows)
     if not account_table.winfo_manager():account_table.pack(fill='both',expand=True,padx=8,pady=8)
     table_rows=[]
     for idx,(a,r) in enumerate(data):
@@ -1486,46 +1432,6 @@ def refresh():
     _selection_changed(len(account_table.selected))
     totals_var.set(f'TOTAL  ·  Streams: {number(total_stream)}   ·   Pendengar: {number(total_listeners)}   ·   Saldo: {total_balance}')
     _sync_pages()
-
-def render_country_columns(data):
-    """Show country groups in two independent side-by-side columns."""
-    grouped={}
-    for a,r in data:grouped.setdefault(account_category(a),[]).append((a,r))
-    names=[c for c in categories if c in grouped]
-    names += [c for c in grouped if c not in names]
-    if not names:
-        label(rows,'Tidak ada akun pada kategori ini.',12,DIM).pack(padx=22,pady=30)
-        return
-    for i,name in enumerate(names):
-        col=i%2; row=i//2
-        rows.grid_columnconfigure(col,weight=1,uniform='country')
-        group=tk.Frame(rows,bg=CARD,highlightbackground=LINE,highlightthickness=1)
-        group.grid(row=row,column=col,sticky='nsew',padx=10,pady=10)
-        members=grouped[name]
-        gs=sum((r or {}).get('streams',0) for a,r in members)
-        gl=sum((r or {}).get('listeners',0) for a,r in members)
-        gb=sum(float(a.get('balance',0)) for a,r in members)
-        header=tk.Frame(group,bg=CARD);header.pack(fill='x',padx=14,pady=(13,8))
-        label(header,name,14,bold=True).pack(side='left')
-        label(header,f'{len(members)} akun',9,DIM).pack(side='right')
-        label(group,f'Streams {number(gs)}   ·   Pendengar {number(gl)}',10,GREEN).pack(anchor='w',padx=14)
-        label(group,f'Jumlah HP {sum(int(a.get("phone_count",0)) for a,r in members)}',10,BLUE).pack(anchor='w',padx=14,pady=(2,0))
-        label(group,f'Saldo {grouped_balance([a for a,r in members])}',10,DIM).pack(anchor='w',padx=14,pady=(2,10))
-        for a,r in members:
-            line=tk.Frame(group,bg=PANEL);line.pack(fill='x',padx=10,pady=5)
-            top=tk.Frame(line,bg=PANEL);top.pack(fill='x',padx=10,pady=(9,2))
-            label(top,a['name'],11,bold=True).pack(side='left')
-            label(top,'● Aktif' if _chrome_status.get(str(a['id']),False) else '● Tertutup',9,GREEN if _chrome_status.get(str(a['id']),False) else DIM).pack(side='right')
-            metrics=tk.Frame(line,bg=PANEL);metrics.pack(fill='x',padx=10)
-            streams=(number(r.get('streams',0))+(' ≈' if r.get('streams_approx') else '')) if r else '—'
-            label(metrics,f'Streams: {streams}  |  Pendengar: {number(r.get("listeners",0)) if r else "—"}',9,DIM).pack(anchor='w')
-            label(metrics,f'Jumlah HP: {a.get("phone_count",0)}',9,BLUE).pack(anchor='w',pady=(3,0))
-            label(metrics,f'Saldo: {account_money(a) if a.get("balance_updated") else "—"}',9,DIM).pack(anchor='w',pady=(3,0))
-            acts=tk.Frame(line,bg=PANEL);acts.pack(fill='x',padx=8,pady=(4,8))
-            button(acts,'Buka',lambda a=a:open_streams(a),True,height=28,font_size=9,padx=10).pack(side='left',padx=2)
-            for title,fn in [('Streams',lambda a=a:read_visible(a,'streams')),('Pendengar',lambda a=a:read_visible(a,'listeners')),('Saldo',lambda a=a:read_visible(a,'balance'))]:
-                button(acts,title,fn,height=28,font_size=9,padx=9).pack(side='left',padx=2)
-            RoundButton(acts,'',lambda a=a:show_actions(a),icon='more',height=28,padx=6).pack(side='left',padx=2)
 
 def restart_app():
     """Buka ulang aplikasi (dipakai saat mengganti mode tampilan)."""
@@ -1562,7 +1468,6 @@ def show_actions(a):
            ('Ubah nama','edit',lambda:rename(a),'secondary'),
            ('Atur jumlah HP, artis & lagu','grid',lambda:edit_account_counts(a),'secondary'),
            ('Pindahkan kategori / negara','tag',lambda:change_category(a),'secondary'),
-           ('Kredensial login','key',lambda:edit_credentials(a),'secondary'),
            ('Hapus akun & profil','trash',lambda:delete(a),'danger')]
     for text,icon_name,fn,variant in items:
         RoundButton(w,text,lambda fn=fn:(w.destroy(),fn()),icon=icon_name,variant=variant,width=320,height=38).pack(padx=20,pady=3)
@@ -1659,82 +1564,6 @@ def open_update_settings():
     except tk.TclError:pass
 
 
-def _open_path(path):
-    try:
-        os.makedirs(path,exist_ok=True)
-        if os.name=='nt':os.startfile(path)
-        else:subprocess.Popen(['xdg-open',path])
-    except OSError as ex:messagebox.showerror('Gagal membuka folder',str(ex),parent=root)
-
-def open_publisher_settings():
-    """Token GitHub untuk Penerbit Otomatis (hanya di komputer admin)."""
-    import release_publisher as rp, updater as upd
-    repo=upd.load_config(_APP_DIR).get('github_repo') or upd.DEFAULT_GITHUB_REPO
-    win=tk.Toplevel(root);win.title('Penerbit otomatis');win.configure(bg=PANEL);win.resizable(False,False);win.transient(root)
-    body=tk.Frame(win,bg=PANEL,padx=24,pady=20);body.pack(fill='both')
-    label(body,'Penerbit Otomatis',14,bold=True).pack(anchor='w')
-    label(body,'Hanya untuk komputer admin. Dengan token ini, paket rilis yang masuk ke folder\n'+str(rp.INBOX)+
-          '\nlangsung diterbitkan ke GitHub ('+repo+') dan semua aplikasi klien memperbarui otomatis.',9,DIM,justify='left').pack(anchor='w',pady=(4,10))
-    label(body,'Buat di GitHub > Settings > Developer settings > Fine-grained tokens: Repository access = hanya '+repo+
-          ', Permissions > Contents = Read and write.',9,MUTED,wraplength=460,justify='left').pack(anchor='w',pady=(0,8))
-    var=tk.StringVar(value=rp.load_token())
-    ent=UI.styled_entry(body,var,width=52,show='•')
-    ent.pack(fill='x',ipady=4)
-    msg=tk.StringVar(value='Token tersimpan.' if var.get() else 'Belum ada token.')
-    msg_l=tk.Label(body,textvariable=msg,font=(FONT,9),fg=DIM,bg=PANEL,wraplength=460,justify='left');msg_l.pack(anchor='w',pady=(8,0))
-    def say(text,color=DIM):
-        if win.winfo_exists():msg.set(text);msg_l.config(fg=color)
-    def save():
-        token=var.get().strip()
-        try:rp.save_token(token)
-        except (rp.PublishError,OSError) as ex:say(str(ex),RED);return
-        if not token:say('Token dihapus. Penerbit otomatis mati.',AMBER);return
-        say('Menguji token…')
-        def work():
-            try:text,col='✓  '+rp.check_token(token,repo)+' Folder rilis: '+str(rp.INBOX),GREEN
-            except rp.PublishError as ex:text,col=str(ex),RED
-            ui_call(lambda:say(text,col))
-        threading.Thread(target=work,daemon=True).start()
-    def remove():
-        var.set('');save()
-    row=tk.Frame(body,bg=PANEL);row.pack(fill='x',pady=(14,0))
-    button(row,'Simpan & uji',save,True,icon='check').pack(side='left')
-    button(row,'Hapus token',remove,variant='danger').pack(side='left',padx=8)
-    button(row,'Tutup',lambda:(win.destroy(),render_active_page() if active_page=='Pengaturan' else None),variant='ghost').pack(side='right')
-    win.update_idletasks()
-    try:
-        x=root.winfo_rootx()+(root.winfo_width()-win.winfo_reqwidth())//2
-        y=root.winfo_rooty()+max(40,(root.winfo_height()-win.winfo_reqheight())//3)
-        win.geometry(f'+{x}+{y}')
-    except tk.TclError:pass
-
-_publish_state={'busy':False}
-def _publisher_watcher():
-    """Komputer admin: terbitkan paket di ~/SoundOnRilis/masuk ke GitHub (cek tiap menit)."""
-    try:
-        import release_publisher as rp
-        if not _publish_state['busy'] and rp.load_token() and (rp.INBOX/'manifest.json').exists():
-            import updater as upd
-            repo=upd.load_config(_APP_DIR).get('github_repo') or upd.DEFAULT_GITHUB_REPO
-            _publish_state['busy']=True
-            ui_call(lambda:status_var.set('Menerbitkan rilis baru ke GitHub…'))
-            def work():
-                try:
-                    v=rp.process_inbox(repo)
-                    if v:
-                        _update_state['last_check']=0      # aplikasi ini sendiri ikut memperbarui
-                        ui_call(lambda:status_var.set('Rilis %s diterbitkan ke GitHub. Semua aplikasi memperbarui otomatis.'%v))
-                except Exception as ex:
-                    ui_call(lambda m=str(ex):status_var.set('Penerbitan rilis gagal: '+m))
-                finally:
-                    _publish_state['busy']=False
-            threading.Thread(target=work,daemon=True).start()
-    except Exception:
-        _publish_state['busy']=False
-    finally:
-        root.after(60000,_publisher_watcher)
-
-
 # Dedicated sidebar pages. The dashboard remains mounted behind the page overlay;
 # switching pages does not destroy browser sessions or rebuild the main window.
 active_page='Dashboard'
@@ -1757,23 +1586,6 @@ def _transfer_key(password, salt):
         raise RuntimeError('Library cryptography belum terpasang. Jalankan install_dependencies.bat.')
     kdf=PBKDF2HMAC(algorithm=hashes.SHA256(),length=32,salt=salt,iterations=390000)
     return Fernet(base64.urlsafe_b64encode(kdf.derive(password.encode('utf-8'))))
-
-def edit_credentials(a):
-    w=tk.Toplevel(root);w.title('Kredensial — '+a.get('name','Akun'));w.geometry('500x360')
-    w.configure(bg=PANEL);w.transient(root);w.grab_set();w.resizable(False,False)
-    label(w,'Kredensial akun',15,bold=True).pack(anchor='w',padx=25,pady=(24,5))
-    label(w,'Data ini tersimpan lokal dan hanya ikut transfer jika Anda mengekspor paket akun.',9,DIM,wraplength=440,justify='left').pack(anchor='w',padx=25,pady=(0,15))
-    vals={}
-    for title,key,show in [('Email / username','login_email',''),('Password','login_password','•')]:
-        row=tk.Frame(w,bg=PANEL);row.pack(fill='x',padx=25,pady=8)
-        label(row,title,10,DIM).pack(anchor='w',pady=(0,5))
-        v=tk.StringVar(value=str(a.get(key,'')));vals[key]=v
-        e=tk.Entry(row,textvariable=v,show=show,bg=CARD,fg=WHITE,insertbackground=WHITE,relief='flat',font=(FONT,11))
-        e.pack(fill='x',ipady=8)
-    def save_creds():
-        a['login_email']=vals['login_email'].get().strip();a['login_password']=vals['login_password'].get()
-        persist();w.destroy();refresh();messagebox.showinfo('Tersimpan','Kredensial akun tersimpan secara lokal.',parent=root)
-    button(w,'Simpan Kredensial',save_creds,True).pack(anchor='e',padx=25,pady=(18,0))
 
 def export_transfer_package():
     if not accounts:
@@ -1891,14 +1703,14 @@ def page_metric(parent,title,value,color=PURPLE,icon_name=None):
     label(texts,title,9,DIM).pack(anchor='w')
     label(texts,value,16,WHITE,bold=True).pack(anchor='w')
 
-def page_account_actions(parent,a,with_data=True):
+def page_account_actions(parent,a):
     action=tk.Frame(parent,bg=PANEL);action.pack(side='right',padx=8)
     items=[('Buka',lambda a=a:open_account(a)),
            ('Streams',lambda a=a:read_visible(a,'streams')),
            ('Pendengar',lambda a=a:read_visible(a,'listeners')),
            ('Saldo',lambda a=a:read_visible(a,'balance'))]
     items.append(('Asal Streams',lambda a=a:read_regions(a)))
-    if with_data:items.append(('Data',lambda a=a:edit(a)))
+    items.append(('Data',lambda a=a:edit(a)))
     items.append(('⋯',lambda a=a:show_actions(a)))
     for title,fn in items:
         if title=='⋯':RoundButton(action,'',fn,icon='more',height=30,padx=7).pack(side='left',padx=2)
@@ -1925,12 +1737,12 @@ def edit_owner_name(owner):
     if name is not None:commit_ownership_change(lambda:rename_owner(accounts,owners,owner,name))
 
 def delete_owner_name(owner):
-    if messagebox.askyesno('Hapus Pemilik',f'Hapus pemilik {owner}?\nArtisnya akan masuk Belum ditentukan. Riwayat penghasilan dan akun tetap tersimpan.',parent=root):
+    if messagebox.askyesno('Hapus Pemilik',f'Hapus pemilik {owner}?\nArtisnya akan masuk Belum ditentukan. Akun tetap tersimpan.',parent=root):
         commit_ownership_change(lambda:remove_owner(accounts,owners,owner))
 
 def artist_options(a,artist):
     menu=tk.Menu(root,tearoff=False,bg=PANEL,fg=WHITE,activebackground=PURPLE,activeforeground=WHITE)
-    menu.add_command(label='Atur Artis & Penghasilan Manual',command=lambda:edit_artist_finance(a,target_artist=artist['id'] if artist else None))
+    menu.add_command(label='Atur Artis & Pemilik',command=lambda:edit_artists(a,target_artist=artist['id'] if artist else None))
     menu.add_command(label='Terakhir sinkron: '+(a.get('balance_updated') or 'Belum pernah'),state='disabled')
     if artist:
         def rename_artist():
@@ -1944,10 +1756,10 @@ def artist_options(a,artist):
                 artist['name']=value
             commit_ownership_change(change)
         def release():
-            if messagebox.askyesno('Lepaskan Artis',f'Lepaskan {artist["name"]} dari pemiliknya?\nRiwayat penghasilan tetap tersimpan dan artis bisa dipilih oleh pemilik lain.',parent=root):
+            if messagebox.askyesno('Lepaskan Artis',f'Lepaskan {artist["name"]} dari pemiliknya?\nArtis bisa dipilih oleh pemilik lain.',parent=root):
                 commit_ownership_change(lambda:artist.update(owner=''))
         def delete_artist():
-            if messagebox.askyesno('Hapus Artis Permanen',f'Hapus {artist["name"]} beserta seluruh riwayat penghasilannya? Akun SoundOn tetap ada.',parent=root):
+            if messagebox.askyesno('Hapus Artis Permanen',f'Hapus {artist["name"]} dari daftar artis? Akun SoundOn tetap ada.',parent=root):
                 commit_ownership_change(lambda:a['artists'].remove(artist))
         menu.add_command(label='Ubah Nama Artis',command=rename_artist)
         if artist.get('owner'):menu.add_command(label='Lepaskan dari Pemilik',command=release)
@@ -1990,7 +1802,7 @@ def render_owner_card(parent,group,index):
     if not group['entries']:
         label(body,'Belum ada artis. Klik Tambah Artis.',10,DIM).pack(anchor='w',pady=10)
     for entry in sorted(group['entries'],key=lambda e:(e['artist']['name'] if e['artist'] else e['account']['name']).casefold()):
-        a=entry['account'];artist=entry['artist'];amount=entry['amount']
+        a=entry['account'];artist=entry['artist']
         row_box=tk.Frame(body,bg=CARD);row_box.pack(fill='x',pady=2)
         row=tk.Frame(row_box,bg=CARD);row.pack(fill='x',padx=4)
         row.columnconfigure(0,weight=1)
@@ -2043,8 +1855,6 @@ def render_active_page():
             'Saldo tersedia dibaca dari My Earnings melalui Sinkron. Satu akun dihitung sekali pada total pemilik.','users')
         tools_row=tk.Frame(controls,bg=PANEL);tools_row.pack(fill='x')
         button(tools_row,'＋  Tambah Pemilik',add_owner,True).pack(side='left',padx=(0,8))
-        button(tools_row,'＋  Tambah Akun',add_account).pack(side='left',padx=(0,8))
-        button(tools_row,'Kategori Negara',add_category,icon='tag').pack(side='left',padx=(0,8))
         button(tools_row,'⟳  Refresh',lambda:(poll_chrome_status(),refresh())).pack(side='left')
         label(tools_row,f'{len(accounts)} akun terdaftar',9,DIM).pack(side='right',padx=4)
         global account_view_var
@@ -2062,7 +1872,7 @@ def render_active_page():
         cards=[]
         builders=[]
         if account_view_var.get()=='Per Pemilik':
-            for idx,group in enumerate(owner_groups(accounts,artist_month_var.get(),owners)):
+            for idx,group in enumerate(owner_groups(accounts,owners)):
                 builders.append(lambda group=group,idx=idx:render_owner_card(account_grid,group,idx))
         else:
             def build_account_card(a,idx):
@@ -2077,7 +1887,6 @@ def render_active_page():
                 label(titlebox,f'{account_category(a)}   ·   Akun #{a["id"]}',9,DIM).pack(anchor='w',pady=(4,0))
                 tools=tk.Frame(body,bg=PANEL);tools.pack(fill='x',pady=(10,0))
                 button(tools,'Atur HP, Artis & Lagu',lambda a=a:edit_account_counts(a),variant='subtle',icon='edit',font_size=9,height=30).pack(side='left',padx=(0,6))
-                button(tools,'Kredensial',lambda a=a:edit_credentials(a),icon='key',font_size=9,height=30).pack(side='left',padx=(0,6))
                 button(tools,'Kelola',lambda a=a:show_actions(a),icon='more',font_size=9,height=30).pack(side='left')
                 tk.Frame(body,bg=LINE,height=1).pack(fill='x',pady=(12,10))
                 stats=tk.Frame(body,bg=PANEL);stats.pack(fill='x')
@@ -2090,7 +1899,7 @@ def render_active_page():
                     tt=tk.Frame(tile,bg=CARD);tt.pack(side='left')
                     label(tt,title,8,DIM).pack(anchor='w')
                     label(tt,number(a.get(key,0)),14,WHITE,bold=True).pack(anchor='w')
-                render_artist_finance(body,a)
+                render_artists(body,a)
                 foot=tk.Frame(body,bg=PANEL);foot.pack(fill='x',pady=(10,0))
                 page_account_actions(foot,a)
                 return outer
@@ -2337,17 +2146,6 @@ def render_active_page():
             label(cell,cap,8,MUTED).pack(anchor='w')
             label(cell,val,11,col,bold=True).pack(anchor='w',pady=(2,0))
         button(info_row,'Periksa Pembaruan',open_update_settings,True,icon='refresh').pack(side='right')
-        import release_publisher as _rp
-        pub=tk.Frame(upd,bg=PANEL);pub.pack(fill='x',pady=(14,0))
-        _on=bool(_rp.load_token())
-        label(pub,'Penerbit otomatis (komputer admin)',10,WHITE,bold=True).pack(anchor='w')
-        label(pub,('Aktif — paket rilis yang masuk ke folder '+str(_rp.INBOX)+' langsung diterbitkan ke GitHub, lalu semua aplikasi memperbarui otomatis.')
-              if _on else 'Mati. Isi token GitHub di komputer admin agar rilis baru bisa diterbitkan tanpa unggah manual.',
-              9,GREEN if _on else DIM,wraplength=820,justify='left').pack(anchor='w',pady=(2,6))
-        prow=tk.Frame(pub,bg=PANEL);prow.pack(fill='x')
-        button(prow,'Atur token penerbit…',open_publisher_settings,icon='cloud').pack(side='left')
-        if _on:
-            button(prow,'Buka folder rilis',lambda:_open_path(str(_rp.RELEASE_DIR)),variant='ghost').pack(side='left',padx=8)
         # Tampilan (mode terang/gelap)
         look=page_section(page_body,'Tampilan','Pilih mode gelap atau terang. Aplikasi dibuka ulang otomatis untuk menerapkannya.','sun',AMBER)
         modes=tk.Frame(look,bg=PANEL);modes.pack(fill='x')
@@ -2398,9 +2196,8 @@ def render_active_page():
         info=tk.Frame(syn,bg=PANEL);info.pack(fill='x',pady=(4,0))
         label(info,_sync_state['text'] or cfg['last_summary'] or 'Belum pernah dijalankan.',9,DIM).pack(side='left')
         button(info,'Lihat laporan',open_sync_log,icon='info',font_size=9,height=30).pack(side='right')
-        button(info,'Hentikan',stop_sync,variant='danger',icon='stop',font_size=9,height=30).pack(side='right',padx=6)
-        button(info,'Ulangi yang gagal',retry_failed_sync,icon='sync',font_size=9,height=30).pack(side='right')
-        button(info,'Sinkron per bulan…',ask_month_and_sync,True,icon='sync',font_size=9,height=30).pack(side='right')
+        # Menjalankan/menghentikan/mengulang sinkron ada di menu Sinkron (Dashboard).
+        label(syn,'Jalankan, hentikan, atau ulangi sinkron dari menu Sinkron di Dashboard.',9,MUTED).pack(anchor='w',pady=(8,0))
         # Data & transfer
         data_sec=page_section(page_body,'Data & Transfer Akun','Cadangkan data atau pindahkan akun ke komputer lain.','database',BLUE)
         for title,desc,fn,icon_name in [('Cadangkan data akun','Simpan akun, kategori, pemilik, dan inventaris ke file JSON.',backup_account_data,'export'),
@@ -2447,7 +2244,7 @@ def switch_page(name):
         return
     page_title.configure(text=name)
     page_subtitle.configure(text={
-        'Daftar Akun':'Kelola pemilik, artis, penghasilan, dan akun SoundOn.',
+        'Daftar Akun':'Kelola pemilik, artis, dan akun SoundOn.',
         'Analytics':'Bandingkan Streams dan Pendengar berdasarkan negara.',
         'Penghasilan':'Pantau saldo tersedia seluruh akun.',
         'Inventaris HP':'Pantau HP dipakai akun, tersedia, service, rusak, dan tidak terpakai.',
@@ -2481,7 +2278,7 @@ def switch_page(name):
         def first_render(target=name):
             if active_page!=target:return
             page_subtitle.configure(text={
-                'Daftar Akun':'Kelola pemilik, artis, penghasilan, dan akun SoundOn.',
+                'Daftar Akun':'Kelola pemilik, artis, dan akun SoundOn.',
                 'Analytics':'Bandingkan Streams dan Pendengar berdasarkan negara.',
                 'Penghasilan':'Pantau saldo tersedia seluruh akun.',
                 'Inventaris HP':'Pantau HP dipakai akun, tersedia, service, rusak, dan tidak terpakai.',
@@ -2489,7 +2286,7 @@ def switch_page(name):
             render_active_page();page_rendered[target]=_page_key()
         root.after_idle(first_render)
 
-root=tk.Tk();artist_month_var=tk.StringVar(master=root,value=date.today().strftime('%Y-%m'));root.title('SoundOn — Account Manager Dashboard');root.geometry('1600x910');root.minsize(1280,690);root.configure(bg=BG)
+root=tk.Tk();root.title('SoundOn — Account Manager Dashboard');root.geometry('1600x910');root.minsize(1280,690);root.configure(bg=BG)
 style=UI.setup_styles(root)
 root.option_add('*TCombobox.font',(FONT,10))
 sidebar=tk.Frame(root,bg=SIDE,width=232,highlightthickness=0)
@@ -2520,8 +2317,6 @@ _studio_nav=tk.Frame(sidebar,bg=SIDE);_studio_nav.pack(fill='x',padx=12)
 UI.NavItem(_studio_nav,'Unggah Lagu','music',launch_upload_manager).pack(fill='x',pady=2)
 _foot=tk.Frame(sidebar,bg=SIDE);_foot.pack(side='bottom',fill='x',padx=16,pady=(0,14))
 label(_foot,'Versi '+APP_VERSION,8,MUTED).pack(side='left',padx=(8,0))
-RoundButton(_foot,'Terang' if UI.THEME=='dark' else 'Gelap',lambda:set_theme('light' if UI.THEME=='dark' else 'dark'),
-            icon='sun' if UI.THEME=='dark' else 'moon',variant='ghost',height=28,font_size=9,padx=8).pack(side='right')
 button(sidebar,'＋  Tambah Akun',add_account,True,height=38).pack(side='bottom',fill='x',padx=16,pady=(10,10))
 sidebar_info=UI.RoundedPanel(sidebar,outer=SIDE,color=PANEL,radius=12);sidebar_info.pack(side='bottom',fill='x',padx=16,pady=(0,4))
 sidebar_total=tk.StringVar(value='0');sidebar_connected=tk.StringVar(value='0')
@@ -2537,27 +2332,36 @@ main=tk.Frame(root,bg=BG);main.pack(side='left',fill='both',expand=True,padx=24,
 dash=tk.Frame(main,bg=BG);dash.pack(fill='both',expand=True)
 head=tk.Frame(dash,bg=BG);head.pack(fill='x',pady=(0,16))
 left_head=tk.Frame(head,bg=BG);left_head.pack(side='left')
+greeting_var=tk.StringVar(value=UI.greeting())
+tk.Label(left_head,textvariable=greeting_var,font=(FONT,10),fg=PURPLE,bg=BG).pack(anchor='w')
 label(left_head,'Dashboard',22,bold=True).pack(anchor='w')
 last_update=tk.StringVar(value='')
 _sub=tk.Frame(left_head,bg=BG);_sub.pack(anchor='w',pady=(2,0))
 tk.Label(_sub,textvariable=last_update,font=(FONT,9),fg=MUTED,bg=BG).pack(side='left')
 sync_status=tk.StringVar(value=sync_settings()['last_summary'])
 tk.Label(_sub,textvariable=sync_status,font=(FONT,9),fg=PURPLE,bg=BG).pack(side='left',padx=(14,0))
+# Label ringkas di bawah judul (diisi ulang setiap refresh).
+insight_row=tk.Frame(left_head,bg=BG);insight_row.pack(anchor='w',pady=(8,0))
+def update_insights(shown,with_data,connected):
+    for w in insight_row.winfo_children():w.destroy()
+    chips=[(f'{len(accounts)} akun',PURPLE),(f'{connected} Chrome aktif',GREEN if connected else MUTED)]
+    missing=shown-with_data
+    chips.append((f'{missing} akun belum ada data periode ini',AMBER) if missing else ('Semua akun punya data periode ini',GREEN))
+    if _sync_state['running']:chips.append(('Sinkron berjalan…',BLUE))
+    for text,color in chips:
+        UI.pill(insight_row,text,color,BG).pack(side='left',padx=(0,6))
 # Satu periode untuk Dashboard dan Analytics.
 today=date.today();first=today.replace(day=1)
 start_var=tk.StringVar(value=str(first));end_var=tk.StringVar(value=str(today));platform_var=tk.StringVar(value='Semua Platform')
-analytics_start_var=start_var;analytics_end_var=end_var
-def _period_changed():
-    refresh()
 button(head,'⟳  Refresh',lambda:(poll_chrome_status(),refresh())).pack(side='right',padx=(8,0))
 menu_button(head,'Sinkron',[('Sinkron semua akun (periode terpilih)',lambda:start_sync()),('Sinkron per bulan…',ask_month_and_sync),
                             ('Ulangi akun yang belum berhasil',retry_failed_sync),('Hentikan sinkron',stop_sync),None,
                             ('Lihat laporan sinkron',open_sync_log),('Pengaturan sinkron…',lambda:switch_page('Pengaturan'))],
             icon='sync',variant='subtle').pack(side='right',padx=(8,0))
-platforms=['Semua Platform','Spotify','TikTok','Amazon Music','YouTube Music','Apple Music','Lainnya']
-ttk.Combobox(head,textvariable=platform_var,values=platforms,state='readonly',style='Dark.TCombobox',width=16).pack(side='right',padx=(8,0))
+# Hanya platform yang bisa dibaca sinkron (auto_sync.SUPPORTED_PLATFORMS).
+ttk.Combobox(head,textvariable=platform_var,values=list(auto_sync.SUPPORTED_PLATFORMS),state='readonly',style='Dark.TCombobox',width=16).pack(side='right',padx=(8,0))
 platform_var.trace_add('write',lambda *_:refresh())
-period_button=PeriodButton(head,start_var,end_var,_period_changed);period_button.pack(side='right')
+period_button=PeriodButton(head,start_var,end_var,refresh);period_button.pack(side='right')
 # Dua ringkasan negara di bagian atas dashboard: Indonesia dan Amerika Serikat.
 US_NAMES=('amerika serikat','united states','usa','us')
 def in_country(a,country):
@@ -2584,28 +2388,55 @@ for idx,country in enumerate(('Indonesia','Amerika Serikat')):
         label(text,title,9,DIM).pack(anchor='w')
         val=tk.StringVar(value='—')
         tk.Label(text,textvariable=val,font=(FONT,15,'bold'),fg=WHITE,bg=CARD,anchor='w').pack(anchor='w',pady=(1,0))
-        fields[title]=val
+        sub=tk.StringVar(value='')
+        tk.Label(text,textvariable=sub,font=(FONT,8),fg=MUTED,bg=CARD,anchor='w').pack(anchor='w')
+        fields[title]=val;fields[title+':sub']=sub
+        if title in ('Streams','Pendengar'):
+            spark=UI.Sparkline(inner,accent,CARD,96,38);spark.pack(side='right',padx=(6,0))
+            fields[title+':spark']=spark
+        UI.hover_highlight(cell,CARD,CARD_HI)
     country_panel_vars.append((country,fields))
 
-# Ringkasan Inventaris HP pada Dashboard utama.
+# Ringkasan Inventaris HP pada Dashboard utama (satu baris ringkas; detail di halaman Inventaris HP).
 inventory_dash=panel(dash);inventory_dash.pack(fill='x',pady=(0,14))
-inv_head=tk.Frame(inventory_dash,bg=PANEL);inv_head.pack(fill='x',padx=18,pady=(12,8))
-label(inv_head,'Inventaris HP',13,bold=True).pack(side='left')
-button(inv_head,'Buka Inventaris',lambda:switch_page('Inventaris HP'),icon='external',height=30,font_size=9).pack(side='right')
-inv_metrics=tk.Frame(inventory_dash,bg=PANEL);inv_metrics.pack(fill='x',padx=14,pady=(0,14))
+inv_row=tk.Frame(inventory_dash,bg=PANEL);inv_row.pack(fill='x',padx=14,pady=10)
+inv_title=tk.Frame(inv_row,bg=PANEL);inv_title.pack(side='left',padx=(4,12))
+icon_badge(inv_title,'phone',PURPLE,PANEL,30).pack(side='left',padx=(0,8))
+label(inv_title,'Inventaris HP',12,bold=True).pack(side='left')
+button(inv_row,'Buka',lambda:switch_page('Inventaris HP'),icon='external',height=30,font_size=9).pack(side='right',padx=(10,0))
+inv_metrics=tk.Frame(inv_row,bg=PANEL);inv_metrics.pack(side='left',fill='x',expand=True)
 inventory_dashboard_vars={}
 for i,(title,color,glyph) in enumerate([('DIPAKAI AKUN',PURPLE,'phone'),('TERSEDIA',GREEN,'check'),('SERVICE',BLUE,'wrench'),('RUSAK',RED,'alert'),('TIDAK TERPAKAI',MUTED,'circle'),('TOTAL HP',AMBER,'grid')]):
-    cell=tk.Frame(inv_metrics,bg=CARD);cell.grid(row=0,column=i,sticky='nsew',padx=4,pady=0);inv_metrics.grid_columnconfigure(i,weight=1,uniform='inv')
-    inner=tk.Frame(cell,bg=CARD);inner.pack(fill='both',expand=True,padx=12,pady=10)
-    icon_badge(inner,glyph,color,CARD,32).pack(side='left',padx=(0,10))
-    text=tk.Frame(inner,bg=CARD);text.pack(side='left',fill='both',expand=True)
-    label(text,title.capitalize() if title!='TOTAL HP' else 'Total HP',9,DIM).pack(anchor='w')
+    cell=tk.Frame(inv_metrics,bg=CARD);cell.grid(row=0,column=i,sticky='nsew',padx=3);inv_metrics.grid_columnconfigure(i,weight=1,uniform='inv')
+    inner=tk.Frame(cell,bg=CARD);inner.pack(fill='both',expand=True,padx=10,pady=6)
+    icon_badge(inner,glyph,color,CARD,24).pack(side='left',padx=(0,8))
     v=tk.StringVar(value='0');inventory_dashboard_vars[title]=v
-    tk.Label(text,textvariable=v,font=(FONT,14,'bold'),fg=WHITE,bg=CARD,anchor='w').pack(anchor='w')
+    tk.Label(inner,textvariable=v,font=(FONT,12,'bold'),fg=WHITE,bg=CARD).pack(side='left')
+    short={'DIPAKAI AKUN':'Dipakai','TIDAK TERPAKAI':'Tak terpakai','TOTAL HP':'Total'}.get(title,title.capitalize())
+    tk.Label(inner,text=short,font=(FONT,8),fg=DIM,bg=CARD).pack(side='left',padx=(6,0))
+    UI.hover_highlight(cell,CARD,CARD_HI)
 def update_inventory_dashboard():
     assigned=assigned_phone_count();others=sum(phone_inventory[k] for k in ('tersedia','service','rusak','tidak_terpakai'))
     vals={'DIPAKAI AKUN':assigned,'TERSEDIA':phone_inventory['tersedia'],'SERVICE':phone_inventory['service'],'RUSAK':phone_inventory['rusak'],'TIDAK TERPAKAI':phone_inventory['tidak_terpakai'],'TOTAL HP':assigned+others}
     for k,v in vals.items(): inventory_dashboard_vars[k].set(number(v))
+
+def monthly_series(members,key,platform,months=6):
+    """Total per bulan (6 bulan terakhir, terlama dulu) dari catatan bulanan sinkron; None bila kosong."""
+    y,m=date.today().year,date.today().month;seq=[]
+    for _ in range(months):
+        seq.append('%04d-%02d'%(y,m));m-=1
+        if m==0:y,m=y-1,12
+    out=[]
+    for month in reversed(seq):
+        total=None
+        for a in members:
+            best=None
+            for r in a.get('records',[]):
+                if (r.get('start')==month+'-01' and str(r.get('end',''))[:7]==month
+                        and r.get('platform','Semua Platform')==platform and (best is None or r['end']>best['end'])):best=r
+            if best:total=(total or 0)+best.get(key,0)
+        out.append(total)
+    return out
 
 def update_country_panels(start,end,platform):
     # Ringkasan selalu memuat semua akun negara tersebut, tidak terpengaruh pencarian/filter tabel.
@@ -2616,17 +2447,20 @@ def update_country_panels(start,end,platform):
         fields['Pendengar'].set(number(sum((r or {}).get('listeners',0) for r in recs)))
         fields['Saldo Tersedia'].set(grouped_balance(members))
         fields['Jumlah Akun'].set(str(len(members)))
+        for key,title in (('streams','Streams'),('listeners','Pendengar')):
+            series=monthly_series(members,key,platform)
+            fields[title+':spark'].set(series)
+            fields[title+':sub'].set('Tren 6 bulan' if sum(v is not None for v in series)>=2 else 'Tren muncul setelah 2 bulan sinkron')
+        synced=[a.get('balance_updated') for a in members if a.get('balance_updated')]
+        fields['Saldo Tersedia:sub'].set('Sinkron '+short_time(max(synced)) if synced else 'Belum disinkronkan')
+        online=sum(bool(_chrome_status.get(str(a['id']),False)) for a in members)
+        fields['Jumlah Akun:sub'].set(f'{online} Chrome aktif')
 bar=tk.Frame(dash,bg=BG);bar.pack(fill='x',pady=(0,10))
 label(bar,'Daftar Akun',14,bold=True).pack(side='left',padx=(0,6))
 category_var=tk.StringVar(value='Semua Kategori')
 category_filter=ttk.Combobox(bar,textvariable=category_var,values=['Semua Kategori']+categories,state='readonly',style='Dark.TCombobox',width=17)
 category_filter.pack(side='left',padx=6)
 category_var.trace_add('write',lambda *_:refresh())
-button(bar,'＋  Kategori',add_category,height=32,font_size=9).pack(side='left',padx=3)
-view_var=tk.StringVar(value='Tabel Semua')
-view_filter=ttk.Combobox(bar,textvariable=view_var,values=['Kolom Negara','Tabel Semua'],state='readonly',style='Dark.TCombobox',width=13)
-view_filter.pack(side='left',padx=6)
-view_var.trace_add('write',lambda *_:refresh())
 search_var=tk.StringVar();sort_var=tk.StringVar(value='Streams terbanyak')
 search=UI.search_entry(bar,search_var,'Cari nama atau ID akun…',width=22)
 search.pack(side='right',padx=(8,0))
@@ -2665,14 +2499,6 @@ account_table=AccountTable(wrap,{'open':lambda r:open_streams(r['account']),'dat
                                  'more':lambda r:show_actions(r['account']),'delete':lambda r:delete_accounts([r['account']])},_row_menu)
 account_table.on_selection=_selection_changed
 account_table.pack(fill='both',expand=True,padx=8,pady=8)
-# Tampilan Kolom Negara (kartu) memakai area gulir sendiri.
-country_box=tk.Frame(wrap,bg=PANEL)
-canvas=tk.Canvas(country_box,bg=PANEL,highlightthickness=0)
-scroll=ttk.Scrollbar(country_box,orient='vertical',command=canvas.yview,style='Dark.Vertical.TScrollbar')
-canvas.configure(yscrollcommand=scroll.set);scroll.pack(side='right',fill='y',padx=(0,4),pady=10);canvas.pack(side='left',fill='both',expand=True,padx=(6,0),pady=6)
-rows=tk.Frame(canvas,bg=PANEL);win_id=canvas.create_window((0,0),window=rows,anchor='nw')
-rows.bind('<Configure>',lambda e:canvas.configure(scrollregion=(0,0,canvas.winfo_width(),rows.winfo_reqheight())))
-canvas.bind('<Configure>',lambda e:canvas.itemconfigure(win_id,width=e.width))
 # Full-size independent content surface for sidebar pages; dashboard widgets stay intact.
 page_overlay=tk.Frame(main,bg=BG)
 page_header=tk.Frame(page_overlay,bg=BG);page_header.pack(fill='x',pady=(0,16))
@@ -2699,7 +2525,7 @@ page_canvas.bind('<Configure>',_resize_page_windows)
 # Satu pengendali gulir untuk seluruh aplikasi (lihat ui_theme.WheelScroller).
 def _active_scroll_canvas():
     if active_page!='Dashboard' and page_overlay.winfo_manager():return page_canvas
-    return canvas if country_box.winfo_manager() else account_table.body
+    return account_table.body
 scroller=UI.WheelScroller(root,_active_scroll_canvas)
 root.after(50,_drain_ui_queue)
 refresh()
@@ -2711,11 +2537,6 @@ root.after(1500,_chrome_status_loop)
 root.after(180000,_sync_scheduler)   # cek jadwal sinkron 3 menit setelah aplikasi dibuka, lalu tiap menit
 root.after(60000,_update_watcher)    # cek pembaruan GitHub tiap 20 menit selama aplikasi terbuka
 root.after(15000,_upload_watch_tick)  # folder pantau Studio unggah
-try:
-    import release_publisher as _rp_boot
-    if _rp_boot.load_token():_rp_boot.ensure_folders()
-except Exception:pass
-root.after(20000,_publisher_watcher)  # komputer admin: terbitkan rilis dari ~/SoundOnRilis/masuk
 root.mainloop()
 if _restart_for_update:
     # 75 = keluar untuk pembaruan; run_app.bat menutup konsol lama tanpa pause.
