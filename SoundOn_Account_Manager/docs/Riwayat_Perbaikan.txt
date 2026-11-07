@@ -260,3 +260,10 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Bila SoundOn mengalihkan ke halaman paket "Plans that grow with your career" (/library/pricing), bot langsung membuka ulang halaman tujuan, paling banyak 2 kali, lalu melanjutkan.
 - Berlaku untuk sinkron (Streams/Pendengar dan Saldo), Studio unggah (formulir unggah), serta tombol buka Streams/Saldo per akun di dashboard. Sebelumnya sinkron langsung mencatat akun itu "gagal".
 - Tab Artists yang memang butuh paket berbayar tetap dilewati seperti sebelumnya ("butuh paket SoundOn berbayar"); bot tidak pernah menekan Upgrade.
+
+
+3.18.9: Chrome sinkron tersembunyi dan bisa 1–3 Chrome bersamaan.
+- Pengaturan > Sinkron Otomatis > "Chrome yang berjalan bersamaan": 1, 2, atau 3. Dengan 2 Chrome, sinkron semua akun kira-kira selesai dalam separuh waktu; dengan 3, sekitar sepertiganya. Komputer lebih berat bila lebih banyak. Bawaan: 1 (seperti sebelumnya).
+- "Sembunyikan Chrome sinkron" (aktif bawaan): Chrome akun yang tertutup dibuka tanpa jendela sama sekali, lalu ditutup lagi setelah dibaca. Bila Chrome akun sedang Anda pakai, sinkron memakai jendela terpisah yang langsung diperkecil, tidak lagi menambah tab di jendela Anda.
+- Bila SoundOn tidak mau dibuka tanpa jendela (akun tampak belum login atau halaman tidak termuat), akun itu otomatis dibaca ulang dengan Chrome diperkecil seperti sebelumnya. Opsi ini bisa dimatikan bila perlu.
+- Cara membaca data tidak berubah: tetap membaca halaman SoundOn yang tampil.

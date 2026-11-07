@@ -12,9 +12,11 @@ Untuk setiap akun (berurutan, satu per satu):
 Modul ini tidak menyentuh Tkinter. Hasil dikirim lewat callback; aplikasi
 menyimpannya di thread utama.
 """
+import copy
 import os
 import re
 import subprocess
+import threading
 import time
 import urllib.parse
 from datetime import date, datetime
@@ -151,8 +153,10 @@ class Syncer:
     def __init__(self, *, start, end, platform, open_closed, chrome_path, profile_dir, port_for, ready,
                  read_card, parse_number, on_progress, on_result, should_stop, busy_account=None, log=None,
                  read_balance=None, on_balance=None, read_regions=None, on_region=None, periods=None,
-                 retry_failed=False):
+                 retry_failed=False, workers=1, hidden=False):
         self.retry_failed = retry_failed      # ulang sekali akun yang belum berhasil di akhir sinkron
+        self.workers = max(1, min(3, int(workers or 1)))   # jumlah Chrome yang dibaca bersamaan
+        self.hidden = hidden                  # Chrome sinkron tanpa jendela (lihat _launch)
         self.start, self.end = start, end
         # Beberapa periode sekaligus (mis. bulan ini + bulan lalu). Periode pertama juga dipakai
         # untuk Asal Streams.
@@ -164,7 +168,13 @@ class Syncer:
         self.read_card, self.parse_number = read_card, parse_number
         self.on_progress, self.on_result, self.should_stop = on_progress, on_result, should_stop
         self.busy_account = busy_account or (lambda a: False)
-        self.log = log or (lambda text: None)
+        raw_log = log or (lambda text: None)
+        log_lock = threading.Lock()
+
+        def locked_log(text):
+            with log_lock:                    # beberapa Chrome menulis laporan bersamaan
+                raw_log(text)
+        self.log = locked_log
         self.read_balance, self.on_balance = read_balance, on_balance      # saldo (My Earnings)
         self.read_regions, self.on_region = read_regions, on_region        # asal Streams per artis
 
@@ -228,6 +238,19 @@ class Syncer:
                 pass
         self._popups[:] = keep
 
+    def _new_hidden_window_page(self, browser, ctx):
+        """Chrome akun sedang Anda pakai: buka jendela terpisah yang langsung diperkecil, sehingga
+        tidak ada tab sinkron yang muncul di jendela Anda."""
+        try:
+            cdp = browser.new_browser_cdp_session()
+            with ctx.expect_page(timeout=8000) as info:
+                cdp.send('Target.createTarget', {'url': 'about:blank', 'newWindow': True, 'background': True})
+            page = info.value
+            self._minimize(page)
+            return page
+        except Exception:
+            return self._new_background_page(browser, ctx)
+
     def _new_background_page(self, browser, ctx):
         """Tab baru di latar (tidak mengambil fokus jendela Chrome pengguna)."""
         try:
@@ -256,13 +279,33 @@ class Syncer:
         except Exception:
             return False
 
-    def _launch(self, a):
+    @staticmethod
+    def _chrome_user_agent(chrome):
+        """User-Agent Chrome biasa untuk versi yang terpasang (folder versi di samping chrome.exe).
+        Mode tanpa jendela memakai ini agar SoundOn melihat Chrome yang sama seperti biasa."""
+        try:
+            folder = os.path.dirname(chrome)
+            versions = [d for d in os.listdir(folder) if re.fullmatch(r'\d+\.\d+\.\d+\.\d+', d)]
+        except OSError:
+            return None
+        if not versions:
+            return None
+        major = max(int(v.split('.')[0]) for v in versions)
+        return ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/%d.0.0.0 Safari/537.36' % major)
+
+    def _launch(self, a, hidden=False):
+        """Buka Chrome profil akun. hidden=True: tanpa jendela sama sekali (headless) bila versi
+        Chrome terbaca; selain itu jendela diperkecil. Mengembalikan True bila tanpa jendela."""
         chrome = self.chrome_path()
         if not chrome:
             raise RuntimeError('Google Chrome tidak ditemukan.')
         os.makedirs(self.profile_dir(a), exist_ok=True)
+        ua = self._chrome_user_agent(chrome) if hidden else None
+        view = (['--headless=new', '--user-agent=' + ua, '--window-size=1440,900'] if ua
+                else ['--start-minimized'])
         subprocess.Popen([chrome, '--user-data-dir=' + self.profile_dir(a), '--remote-debugging-address=127.0.0.1',
-                          '--remote-debugging-port=' + str(self.port_for(a)), '--start-minimized',
+                          '--remote-debugging-port=' + str(self.port_for(a))] + view + [
                           # Jendela diperkecil tetap diproses normal (tanpa perlambatan latar).
                           '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
                           '--disable-backgrounding-occluded-windows',
@@ -270,8 +313,14 @@ class Syncer:
         for _ in range(80):
             self._sleep(0.5)
             if self.ready(a):
-                return
+                return bool(ua)
         raise RuntimeError('Chrome akun tidak siap dalam 40 detik.')
+
+    def _wait_closed(self, a):
+        for _ in range(20):
+            if not self.ready(a):
+                return
+            self._sleep(0.5)
 
     def _skip_promo(self, page, url, skipped):
         """SoundOn kadang mengalihkan ke halaman promosi paket ("Plans that grow with your career")
@@ -553,13 +602,24 @@ class Syncer:
         return 'ok', note
 
     def sync_one(self, pw, a):
+        self._headless = False
+        status, note = self._sync_one(pw, a, self.hidden)
+        if self._headless and status in ('login', 'gagal'):
+            # Bila SoundOn tidak mau dibuka tanpa jendela, ulangi akun ini dengan Chrome diperkecil.
+            self.log('  %s: mode tanpa jendela tidak berhasil (%s); dicoba lagi dengan Chrome diperkecil'
+                     % (a.get('name', ''), note[:80]))
+            self._wait_closed(a)
+            status, note = self._sync_one(pw, a, False)
+        return status, note
+
+    def _sync_one(self, pw, a, hidden):
         opened_by_us = False
         if self.busy_account(a):
             return 'lewati', 'Sedang dipakai Studio unggah.'
         if not self.ready(a):
             if not self.open_closed:
                 return 'lewati', 'Chrome akun tertutup.'
-            self._launch(a)
+            self._headless = self._launch(a, hidden)
             opened_by_us = True
         browser = page = None
         try:
@@ -570,6 +630,8 @@ class Syncer:
             if opened_by_us and ctx.pages:
                 page = ctx.pages[0]
                 self._minimize(page)
+            elif hidden:
+                page = self._new_hidden_window_page(browser, ctx)
             else:
                 page = self._new_background_page(browser, ctx)
             self._watch_popups(ctx, page)
@@ -628,57 +690,108 @@ class Syncer:
 
     # ------------------------------------------------------------ semua akun
     def run(self, accounts):
-        from playwright.sync_api import sync_playwright
         summary = {'ok': [], 'login': [], 'lewati': [], 'gagal': []}
         total = len(accounts)
         self.log('Mulai sinkron %d akun · %s · %s' % (total, ', '.join('%s s.d. %s' % p for p in self.periods), self.platform))
-        with sync_playwright() as pw:
-            stopped = not self._pass(pw, accounts, summary)
-            # Ulang otomatis satu kali untuk akun yang perlu login, dilewati, atau gagal (mis. login
-            # baru terbaca setelah halaman lambat, Studio unggah sudah selesai, galat jaringan).
-            failed = [(a, note, key) for key in RETRY_STATUSES for a, note in summary[key]]
-            if self.retry_failed and failed and not stopped:
-                self.log('Mengulang %d akun yang belum berhasil…' % len(failed))
-                for key in RETRY_STATUSES:
-                    summary[key] = []
-                retry = {'ok': [], 'login': [], 'lewati': [], 'gagal': []}
-                try:
-                    self._sleep(10)
-                    done = self._pass(pw, [a for a, _, _ in failed], retry, again=True)
-                except SyncStopped:
-                    done = False
-                for key in summary:
-                    summary[key].extend(retry[key])
-                if not done:
-                    # Akun yang belum sempat diulang tetap tercatat dengan status dan keterangan awalnya.
-                    tried = {id(a) for key in retry for a, _ in retry[key]}
-                    for a, note, key in failed:
-                        if id(a) not in tried:
-                            summary[key].append((a, note))
+        stopped = not self._round(accounts, summary)
+        # Ulang otomatis satu kali untuk akun yang perlu login, dilewati, atau gagal (mis. login
+        # baru terbaca setelah halaman lambat, Studio unggah sudah selesai, galat jaringan).
+        failed = [(a, note, key) for key in RETRY_STATUSES for a, note in summary[key]]
+        if self.retry_failed and failed and not stopped:
+            self.log('Mengulang %d akun yang belum berhasil…' % len(failed))
+            for key in RETRY_STATUSES:
+                summary[key] = []
+            retry = {'ok': [], 'login': [], 'lewati': [], 'gagal': []}
+            try:
+                self._sleep(10)
+                done = self._round([a for a, _, _ in failed], retry, again=True)
+            except SyncStopped:
+                done = False
+            for key in summary:
+                summary[key].extend(retry[key])
+            if not done:
+                # Akun yang belum sempat diulang tetap tercatat dengan status dan keterangan awalnya.
+                tried = {id(a) for key in retry for a, _ in retry[key]}
+                for a, note, key in failed:
+                    if id(a) not in tried:
+                        summary[key].append((a, note))
         return summary
 
+    def _round(self, accounts, summary, again=False):
+        """Sinkron satu putaran, satu per satu atau beberapa Chrome bersamaan (workers).
+        Mengembalikan False bila dihentikan pengguna."""
+        if getattr(self, 'workers', 1) <= 1 or len(accounts) <= 1:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as pw:
+                return self._pass(pw, accounts, summary, again)
+        return self._pass_parallel(accounts, summary, again)
+
     def _pass(self, pw, accounts, summary, again=False):
-        """Sinkron satu putaran. Mengembalikan False bila dihentikan pengguna."""
         total = len(accounts)
         for i, a in enumerate(accounts, 1):
-            if self.should_stop():
-                self.log('Dihentikan pengguna.')
+            if not self._one(pw, i, total, a, summary, again):
                 return False
-            self.on_progress(i, total, a)
+        return True
+
+    def _pass_parallel(self, accounts, summary, again=False):
+        """Setiap pekerja punya Playwright dan salinan Syncer sendiri (status per akun tidak
+        tercampur); akun diambil bergantian dari satu antrean."""
+        pending = list(enumerate(accounts, 1))
+        total, lock, state = len(accounts), threading.Lock(), {'stopped': False}
+
+        def work(n):
+            clone = copy.copy(self)
             try:
-                status, note = self.sync_one(pw, a)
-            except SyncStopped:
-                self.log('Dihentikan pengguna.')
-                return False
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as pw:
+                    while True:
+                        with lock:
+                            if state['stopped'] or not pending:
+                                return
+                            i, a = pending.pop(0)
+                        if not clone._one(pw, i, total, a, summary, again, lock):
+                            state['stopped'] = True
+                            return
             except Exception as exc:
-                status, note = 'gagal', str(exc).split('\n')[0][:200]
-            if again:
-                note = 'ulang: ' + note
+                self.log('Chrome sinkron #%d berhenti: %s' % (n, str(exc).split('\n')[0][:160]))
+
+        threads = []
+        for n in range(1, min(self.workers, total) + 1):
+            t = threading.Thread(target=work, args=(n,), daemon=True)
+            t.start()
+            threads.append(t)
+            time.sleep(2)             # Chrome tidak dibuka bersamaan persis
+        for t in threads:
+            t.join()
+        if not state['stopped']:
+            for i, a in pending:      # pekerja berhenti karena galat: jangan hilang dari laporan
+                summary['gagal'].append((a, 'tidak sempat dibaca'))
+        return not state['stopped'] and not self.should_stop()
+
+    def _one(self, pw, i, total, a, summary, again=False, lock=None):
+        """Sinkron satu akun dan catat hasilnya. False bila dihentikan pengguna."""
+        if self.should_stop():
+            self.log('Dihentikan pengguna.')
+            return False
+        self.on_progress(i, total, a)
+        try:
+            status, note = self.sync_one(pw, a)
+        except SyncStopped:
+            self.log('Dihentikan pengguna.')
+            return False
+        except Exception as exc:
+            status, note = 'gagal', str(exc).split('\n')[0][:200]
+        if again:
+            note = 'ulang: ' + note
+        if lock is not None:
+            with lock:
+                summary[status].append((a, note))
+        else:
             summary[status].append((a, note))
-            self.log('[%s] %s (#%s): %s' % (status.upper(), a.get('name', ''), a.get('id'), note))
-            try:
-                self._sleep(3)        # jeda sopan antarakun
-            except SyncStopped:
-                self.log('Dihentikan pengguna.')
-                return False
+        self.log('[%s] %s (#%s): %s' % (status.upper(), a.get('name', ''), a.get('id'), note))
+        try:
+            self._sleep(3)            # jeda sopan antarakun
+        except SyncStopped:
+            self.log('Dihentikan pengguna.')
+            return False
         return True

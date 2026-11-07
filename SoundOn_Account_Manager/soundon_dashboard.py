@@ -41,7 +41,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, FONT_SEMI, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.18.8'
+APP_VERSION='3.18.9'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -678,6 +678,10 @@ import auto_sync
 SYNC_LOG=os.path.join(BASE,'sync_log.txt')
 _sync_state={'running':False,'stop':False,'text':''}
 
+def _sync_workers(value):
+    try:return max(1,min(3,int(value)))
+    except (TypeError,ValueError):return 1
+
 def sync_settings():
     st=UI.load_settings()
     try:hour=max(0,min(23,int(st.get('sync_hour',8))))
@@ -685,6 +689,7 @@ def sync_settings():
     return {'enabled':bool(st.get('sync_enabled',True)),'hour':hour,'open_closed':bool(st.get('sync_open_closed',True)),
             'balance':bool(st.get('sync_balance',True)),'regions':bool(st.get('sync_regions',True)),
             'retry_failed':bool(st.get('sync_retry_failed',True)),
+            'workers':_sync_workers(st.get('sync_workers',1)),'hidden':bool(st.get('sync_hidden',True)),
             'last_date':st.get('sync_last_date',''),'last_summary':st.get('sync_last_summary','')}
 
 def _sync_log(text):
@@ -767,8 +772,10 @@ def start_sync(auto=False,periods=None,only_ids=None,plat=None):
         if not targets:
             messagebox.showinfo('Tidak ada akun','Akun yang perlu diulang sudah tidak ada di daftar.',parent=root);return
     if not auto and only_ids is None:
-        minutes=max(1,round(len(targets)*(35+(25 if cfg['balance'] else 0)+(60 if cfg['regions'] else 0))/60))
-        extra='Chrome akun yang tertutup akan dibuka (diperkecil) lalu ditutup lagi.' if cfg['open_closed'] else 'Hanya akun yang Chrome-nya sedang terbuka yang dibaca.'
+        minutes=max(1,round(len(targets)*(35+(25 if cfg['balance'] else 0)+(60 if cfg['regions'] else 0))/60/cfg['workers']))
+        extra=(('Chrome akun yang tertutup dibuka '+('tanpa jendela (tersembunyi)' if cfg['hidden'] else '(diperkecil)')+' lalu ditutup lagi.')
+               if cfg['open_closed'] else 'Hanya akun yang Chrome-nya sedang terbuka yang dibaca.')
+        if cfg['workers']>1:extra+=f'\n{cfg["workers"]} Chrome dibaca bersamaan.'
         what='Streams & Pendengar'+(', Saldo' if cfg['balance'] else '')+(', Asal Streams per artis' if cfg['regions'] else '')
         ptxt=', '.join(f'{p[0]} s.d. {p[1]}' for p in periods)
         if not messagebox.askyesno('Sinkron semua akun',f'Baca {what} untuk {len(targets)} akun\nPeriode: {ptxt} · {plat}\n\n{extra}\n'
@@ -800,7 +807,8 @@ def start_sync(auto=False,periods=None,only_ids=None,plat=None):
         read_balance=visible_available_balance if cfg['balance'] else None,
         on_balance=lambda a,n,c:ui_call(lambda:apply_balance(a,n,c)),
         read_regions=(lambda page:page.evaluate(REGION_SVG_JS)) if cfg['regions'] else None,
-        on_region=lambda a,row:ui_call(lambda:apply_region(a,row)),retry_failed=cfg['retry_failed'])
+        on_region=lambda a,row:ui_call(lambda:apply_region(a,row)),retry_failed=cfg['retry_failed'],
+        workers=cfg['workers'],hidden=cfg['hidden'])
     def worker():
         try:summary=syncer.run(targets);error=None
         except Exception as exc:
@@ -2364,10 +2372,12 @@ def render_active_page():
                          'Sinkron harian membaca data bulanan: Bulan ini (dan Bulan lalu pada tanggal 1–3).','sync',GREEN)
         en_var=tk.BooleanVar(value=cfg['enabled']);oc_var=tk.BooleanVar(value=cfg['open_closed']);hr_var=tk.StringVar(value='%02d:00'%cfg['hour'])
         bal_var=tk.BooleanVar(value=cfg['balance']);reg_var=tk.BooleanVar(value=cfg['regions'])
-        rt_var=tk.BooleanVar(value=cfg['retry_failed'])
+        rt_var=tk.BooleanVar(value=cfg['retry_failed']);hid_var=tk.BooleanVar(value=cfg['hidden'])
+        wk_var=tk.StringVar(value=str(cfg['workers']))
         def save_sync(*_):
             try:UI.save_settings(sync_enabled=en_var.get(),sync_open_closed=oc_var.get(),sync_hour=int(hr_var.get()[:2]),
-                                 sync_balance=bal_var.get(),sync_regions=reg_var.get(),sync_retry_failed=rt_var.get())
+                                 sync_balance=bal_var.get(),sync_regions=reg_var.get(),sync_retry_failed=rt_var.get(),
+                                 sync_hidden=hid_var.get(),sync_workers=_sync_workers(wk_var.get()))
             except (OSError,ValueError):pass
         row1=tk.Frame(syn,bg=PANEL);row1.pack(fill='x',pady=(0,6))
         UI.dark_checkbutton(row1,'  Aktifkan sinkron harian pukul',en_var,PANEL,command=save_sync).pack(side='left')
@@ -2376,6 +2386,13 @@ def render_active_page():
         UI.dark_checkbutton(syn,'  Buka Chrome akun yang tertutup (diperkecil), lalu tutup lagi setelah dibaca',oc_var,PANEL,command=save_sync).pack(anchor='w')
         UI.dark_checkbutton(syn,'  Baca juga Saldo tersedia (My Earnings)',bal_var,PANEL,command=save_sync).pack(anchor='w')
         UI.dark_checkbutton(syn,'  Baca juga Asal Streams per artis (Indonesia / Amerika Serikat), maks. 12 artis per akun',reg_var,PANEL,command=save_sync).pack(anchor='w')
+        UI.dark_checkbutton(syn,'  Sembunyikan Chrome sinkron (tanpa jendela; bila SoundOn menolak, akun itu dibaca dengan Chrome diperkecil)',
+                            hid_var,PANEL,command=save_sync).pack(anchor='w')
+        row_wk=tk.Frame(syn,bg=PANEL);row_wk.pack(fill='x',pady=(2,2))
+        label(row_wk,'  Chrome yang berjalan bersamaan',10).pack(side='left')
+        wk=ttk.Combobox(row_wk,textvariable=wk_var,values=['1','2','3'],state='readonly',width=4,style='Dark.TCombobox')
+        wk.pack(side='left',padx=8);wk.bind('<<ComboboxSelected>>',save_sync)
+        label(row_wk,'Lebih banyak = lebih cepat, tetapi komputer lebih berat.',9,MUTED).pack(side='left')
         UI.dark_checkbutton(syn,'  Ulangi otomatis sekali akun yang perlu login, dilewati, atau gagal di akhir sinkron',rt_var,PANEL,command=save_sync).pack(anchor='w')
         label(syn,'Akun yang belum login dilewati dan dicatat di laporan. Platform yang didukung: Semua Platform dan Spotify.',9,MUTED).pack(anchor='w',pady=(6,4))
         info=tk.Frame(syn,bg=PANEL);info.pack(fill='x',pady=(4,0))
