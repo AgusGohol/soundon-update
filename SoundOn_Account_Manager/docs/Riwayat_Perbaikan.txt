@@ -249,3 +249,8 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Di akhir sinkron, akun yang perlu login, dilewati, atau gagal dibaca ulang sekali secara otomatis (sebelumnya hanya yang gagal). Berguna bila login baru terbaca setelah halaman lambat, Chrome akun baru terbuka, atau Studio unggah sudah selesai memakai akun itu.
 - Opsi di Pengaturan > Sinkron Otomatis kini bernama "Ulangi otomatis sekali akun yang perlu login, dilewati, atau gagal di akhir sinkron" (aktif bawaan).
 - Akun yang tetap belum berhasil setelah diulang masih bisa diulang manual dengan tombol "Ulangi yang belum berhasil".
+
+
+3.18.7: Tombol Ulangi juga bekerja untuk sinkron sebelum versi 3.18.5.
+- Daftar akun yang belum berhasil kini dibaca dari laporan sinkron (sync_log.txt), yang ditulis oleh semua versi. Sebelumnya tombol Ulangi hanya mengenali sinkron yang berjalan di 3.18.5 ke atas dan salah menampilkan "Semua akun berhasil".
+- Bila belum pernah ada sinkron, pesannya kini "Belum ada catatan sinkron", bukan "Semua akun berhasil".

@@ -1,4 +1,4 @@
-SoundOn Account Manager 3.18.6
+SoundOn Account Manager 3.18.7
 
 Mulai: klik run_app.bat.
 Instal kebutuhan pertama kali: install_dependencies.bat.

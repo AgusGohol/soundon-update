@@ -41,7 +41,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, FONT_SEMI, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.18.6'
+APP_VERSION='3.18.7'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -830,9 +830,29 @@ def _finish_sync(summary,error,auto):
                     if len(summary[key])>10:detail+=f'\n…dan {len(summary[key])-10} lainnya'
         _sync_done_dialog(text+detail,[a for a,_ in summary['login']] if summary else [])
 
+def _retry_from_log():
+    """Akun yang belum berhasil pada sinkron terakhir menurut sync_log.txt. Laporan ini ditulis
+    oleh semua versi, jadi juga mencakup sinkron sebelum fitur Ulangi ada. None bila belum ada."""
+    try:
+        with open(SYNC_LOG,encoding='utf-8') as f:lines=f.read().splitlines()
+    except OSError:
+        return None
+    start=max((i for i,line in enumerate(lines) if 'Mulai sinkron ' in line),default=None)
+    if start is None:return None
+    m=re.search(r'Mulai sinkron \d+ akun · (.+) · ([^·]+)$',lines[start])
+    periods=re.findall(r'(\d{4}-\d{2}-\d{2}) s\.d\. (\d{4}-\d{2}-\d{2})',m.group(1)) if m else []
+    last={}
+    for line in lines[start+1:]:
+        r=re.search(r'\[(OK|LOGIN|LEWATI|GAGAL)\] .* \(#([^)]+)\): ',line)
+        if r:last[r.group(2)]=r.group(1)     # status terakhir (putaran ulang menimpa putaran pertama)
+    return {'ids':[i for i,st in last.items() if st!='OK'],'periods':periods,
+            'platform':m.group(2).strip() if m else 'Semua Platform'}
+
 def _pending_retry():
-    """(akun, periode, platform) dari sinkron terakhir yang belum berhasil."""
-    data=UI.load_settings().get('sync_retry') or {}
+    """(akun, periode, platform) dari sinkron terakhir yang belum berhasil, atau None bila belum
+    ada catatan sinkron sama sekali."""
+    data=_retry_from_log() or UI.load_settings().get('sync_retry')
+    if not data:return None
     ids={str(x) for x in data.get('ids',[])}
     try:periods=[(parse_date(s),parse_date(e)) for s,e in data.get('periods',[])]
     except (TypeError,ValueError):periods=[]
@@ -840,7 +860,10 @@ def _pending_retry():
 
 def retry_failed_sync():
     """Sinkron ulang hanya akun yang belum berhasil pada sinkron terakhir (periode yang sama)."""
-    targets,periods,plat=_pending_retry()
+    pending=_pending_retry()
+    if pending is None:
+        messagebox.showinfo('Tidak ada yang diulang','Belum ada catatan sinkron. Jalankan sinkron terlebih dahulu.',parent=root);return
+    targets,periods,plat=pending
     if not targets:
         messagebox.showinfo('Tidak ada yang diulang','Semua akun berhasil pada sinkron terakhir.',parent=root);return
     start_sync(periods=periods or None,only_ids=[a['id'] for a in targets],plat=plat)
@@ -851,7 +874,7 @@ def open_login_accounts(items):
         if not debugger_ready(a):open_account(a)
 
 def _sync_done_dialog(text,login_items):
-    pending=len(_pending_retry()[0])
+    pending=len((_pending_retry() or ([],))[0])
     if not pending:
         messagebox.showinfo('Sinkron selesai',text+'\n\nLaporan lengkap: Pengaturan > Sinkron Otomatis > Lihat laporan.',parent=root);return
     w=tk.Toplevel(root);w.title('Sinkron selesai');w.configure(bg=PANEL);w.transient(root);w.resizable(False,False)
