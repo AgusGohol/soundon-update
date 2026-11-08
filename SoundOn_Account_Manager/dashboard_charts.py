@@ -818,6 +818,38 @@ def _fit(text, font, width):
     return text + '…'
 
 
+class StackedBar(_Surface):
+    """Satu batang bertumpuk + keterangan (mis. komposisi HP per status). items=[(label, nilai, warna)]."""
+
+    def __init__(self, parent, height=96):
+        super().__init__(parent, height, CARD, 14)
+        self.items = []
+
+    def set(self, items):
+        self.items = list(items)
+        self.redraw()
+
+    def _paint(self, w, h):
+        total = sum(v for _, v, _ in self.items) or 0
+        x0, x1, y0, y1 = 18, w - 18, 18, 34
+        rounded_rect(self, x0, y0, x1, y1, 8, mix(CARD, INK, 0.08))
+        if total:
+            x = x0
+            shown = [(lab, v, col) for lab, v, col in self.items if v > 0]
+            for i, (lab, v, col) in enumerate(shown):
+                seg = (x1 - x0) * v / total
+                end = x1 if i == len(shown) - 1 else x + seg
+                self.create_rectangle(x, y0, end, y1, fill=col, outline='')
+                x = end
+        lx = x0
+        for lab, v, col in self.items:
+            pct = (v / total * 100) if total else 0
+            text = '%s  %s  (%.0f%%)' % (lab, _num(v), pct)
+            self.create_oval(lx, 56, lx + 10, 66, fill=col, outline='')
+            self.create_text(lx + 16, 61, text=text, fill=DIM, font=_font(9), anchor='w')
+            lx += text_width(_font(9), text) + 40
+
+
 class Segmented(tk.Canvas):
     """Tombol tab berbentuk kapsul (mis. Ringkasan | Daftar Akun)."""
 

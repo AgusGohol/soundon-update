@@ -324,3 +324,10 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Daftar Akun: satu tabel rapi. "Per Pemilik" menampilkan pemilik beserta artis, akun SoundOn, dan saldo (tombol Sinkron, Buka, ⋯). "Per Akun" dikelompokkan per kategori dengan HP, artis, lagu, dan saldo (tombol Buka, Atur, Artis, ⋯). Ada pencarian pemilik/artis/akun.
 - Sidebar: bagian "STUDIO / Unggah Lagu" dihapus; Studio unggah dibuka dari tombol "Unggah lagu" di Dashboard.
 - Angka yang tidak muat di kolom kini diperkecil hurufnya terlebih dahulu, tidak langsung terpotong.
+
+
+3.22.0: Daftar Akun per pemilik dengan rekap pendapatan bulanan, Inventaris HP baru.
+- Daftar Akun (Per Pemilik): satu halaman per pemilik dengan tombol halaman ‹ 1 2 3 … › bertuliskan nama pemilik. Pilih bulan untuk melihat rekap pemilik itu: jumlah artis, saldo, pendapatan bulan itu (IDR dan USD terpisah), yang ditarik, grafik pendapatan 6 bulan, dan tabel artis beserta saldo dan pendapatan akunnya.
+- Daftar Akun (Per Akun): kolom pendapatan bulan terpilih dan total pendapatan per kategori.
+- Inventaris HP ditata ulang: ringkasan tetap di atas, bar komposisi HP per status, pengubah jumlah dengan tombol − / +, catatan, dan tabel HP per akun (tombol Atur).
+- Perbaikan: halaman Inventaris HP dan Pengaturan tidak lagi "turun" (ada ruang kosong di atas) setelah membuka halaman lain.
