@@ -9,12 +9,14 @@ Activity   daftar aktivitas sinkron terakhir
 StatusGrid kotak status sinkron per akun
 Semua komponen menggambar ulang sendiri saat ukurannya berubah.
 """
+import math
 import tkinter as tk
 
 from ui_theme import (PANEL, CARD, WHITE, DIM, MUTED, PURPLE, GREEN, RED, INK, THEME, FONT,
                       mix, rounded_rect, draw_icon, text_width)
 
 ACCENT = PURPLE                     # aksen utama (merah-oranye pada mode gelap)
+GLOW = 0.13 if THEME == 'dark' else 0    # kekuatan gradien putih di bagian atas panel (mode gelap)
 # Batas peringatan Asal Streams per artis (persen, "lebih dari").
 WARN_US = 80
 WARN_ID = 30
@@ -66,8 +68,10 @@ def tooltip(canvas, x, y, lines, bg=None):
 class _Surface(tk.Canvas):
     """Kanvas dengan panel bulat sebagai latar; subkelas menggambar di _paint(w, h)."""
 
-    def __init__(self, parent, height, color=PANEL, radius=16, width=160):
+    def __init__(self, parent, height, color=PANEL, radius=16, width=160, transparent=False):
         outer = parent.cget('bg')
+        if color == outer and not transparent:
+            color = CARD                      # di atas panel: pakai warna kartu agar terlihat (dan bergradien)
         # Lebar awal kecil: grid/pack yang menentukan lebar sebenarnya.
         super().__init__(parent, height=height, width=width, bg=outer, highlightthickness=0, bd=0)
         self._color, self._radius = color, radius
@@ -79,7 +83,22 @@ class _Surface(tk.Canvas):
         if w < 20 or h < 20:
             return
         rounded_rect(self, 0.5, 0.5, w - 0.5, h - 0.5, self._radius, self._color)
+        if GLOW and not getattr(self, '_transparent', False):
+            self._glow(w, h)
         self._paint(w, h)
+
+    def _glow(self, w, h):
+        """Gradien putih lembut dari atas (memudar ke bawah) + tepi atas yang berkilau."""
+        c, r = self._color, self._radius
+        stop = max(40.0, h * 0.8)
+        for y in range(1, int(stop), 2):
+            t = 1 - y / stop
+            inset = 0.0
+            if y < r:                              # ikuti lengkung sudut atas
+                dy = r - y
+                inset = r - math.sqrt(max(0.0, r * r - dy * dy))
+            self.create_line(inset + 1, y, w - inset - 1, y, fill=mix(c, '#ffffff', GLOW * t * t), width=2)
+        rounded_rect(self, 0.5, 0.5, w - 0.5, h - 0.5, r, '', mix(c, '#ffffff', 0.10))
 
     def _paint(self, w, h):
         pass
@@ -117,7 +136,8 @@ class StatCard(_Surface):
             t = 0.012 * (10 - i)
             r = 40 + i * 9
             self.create_oval(w - 30 - r, -30 - r, w - 30 + r, -30 + r, fill=mix(c, INK, t), outline='')
-        rounded_rect(self, 0.5, 0.5, w - 0.5, h - 0.5, 16, '', mix(c, INK, 0.07))
+        if not GLOW:
+            rounded_rect(self, 0.5, 0.5, w - 0.5, h - 0.5, 16, '', mix(c, INK, 0.07))
         # ikon dalam lingkaran bergaris + judul
         self.create_oval(16, 14, 44, 42, outline=mix(c, INK, 0.25), width=1.2)
         draw_icon(self, self.icon, 22, 20, 16, mix(self.accent, INK, 0.1))
@@ -147,7 +167,8 @@ class StatCard(_Surface):
 
 class AddCard(_Surface):
     def __init__(self, parent, text, command, height=136):
-        super().__init__(parent, height, parent.cget('bg'), 16, width=150)
+        self._transparent = True
+        super().__init__(parent, height, parent.cget('bg'), 16, width=150, transparent=True)
         self.text, self.command = text, command
         self.configure(cursor='hand2')
         self.bind('<ButtonRelease-1>', lambda e: command())

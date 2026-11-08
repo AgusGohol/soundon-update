@@ -331,3 +331,8 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Daftar Akun (Per Akun): kolom pendapatan bulan terpilih dan total pendapatan per kategori.
 - Inventaris HP ditata ulang: ringkasan tetap di atas, bar komposisi HP per status, pengubah jumlah dengan tombol − / +, catatan, dan tabel HP per akun (tombol Atur).
 - Perbaikan: halaman Inventaris HP dan Pengaturan tidak lagi "turun" (ada ruang kosong di atas) setelah membuka halaman lain.
+
+
+3.22.1: Gradien putih pada kartu dan panel grafik.
+- Mode gelap: semua kartu ringkasan dan panel grafik (Dashboard, Analytics, Penghasilan, Daftar Akun, Inventaris HP) kini punya gradien putih lembut di bagian atas yang memudar ke bawah, serta tepi tipis yang berkilau.
+- Panel grafik di halaman Penghasilan dan Daftar Akun kini tampil sebagai kartu (sebelumnya menyatu dengan latar).
