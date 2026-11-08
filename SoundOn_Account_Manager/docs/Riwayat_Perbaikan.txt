@@ -275,3 +275,10 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Penghasilan manual per artis dihapus. "Atur Artis & Pemilik" tetap ada untuk menambah, mengganti nama/pemilik, dan menghapus artis. Saldo tetap dibaca lewat Sinkron. Data lama di file tidak dihapus.
 - Tombol ganda dirapikan: ganti tema hanya di Pengaturan > Tampilan; menjalankan/mengulang/menghentikan sinkron hanya dari menu Sinkron; tambah kategori di Pengaturan > Kategori Negara; Tambah Akun di sidebar; jumlah HP/artis/lagu hanya lewat "Atur jumlah HP, artis & lagu".
 - Studio unggah: mode isi manual yang tidak pernah dipakai dan kolom UPC/ISRC tersembunyi dibuang. Alur otomatis tidak berubah.
+
+
+3.19.1: Aplikasi dibuka tanpa jendela cmd.
+- run_app.bat kini membuka aplikasi dengan pythonw lalu langsung menutup diri, sehingga tidak ada lagi jendela hitam (cmd) yang terbuka selama aplikasi berjalan.
+- Pesan Chrome saat sinkron (mis. "DevTools listening", "external_registry_loader", "TensorFlow Lite") tidak lagi tampil. Pesan galat aplikasi dicatat di SoundOnAccounts\app_log.txt untuk pemeriksaan.
+- Buka ulang setelah ganti tema atau setelah pembaruan juga tanpa jendela cmd. Pada pembaruan pertama ke versi ini, jendela cmd mungkin masih muncul sekejap lalu tertutup.
+- Bila pythonw tidak tersedia di komputer, aplikasi tetap dibuka seperti dulu (dengan jendela cmd).

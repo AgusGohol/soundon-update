@@ -297,7 +297,19 @@ def _wait_for_exit(pid, timeout=40):
         time.sleep(0.3)
 
 
+def app_command(app_dir):
+    """Perintah membuka aplikasi tanpa jendela cmd (pythonw), atau None bila pythonw tidak ada."""
+    pyw = Path(sys.executable).with_name('pythonw.exe')
+    if os.name == 'nt' and pyw.exists():
+        return [str(pyw), str(Path(app_dir) / 'soundon_dashboard.py')]
+    return None
+
+
 def _relaunch(app):
+    cmd = app_command(app)
+    if cmd:
+        subprocess.Popen(cmd, cwd=str(app), creationflags=DETACHED | CREATE_NO_WINDOW, close_fds=True)
+        return
     bat = app / 'run_app.bat'
     if os.name == 'nt' and bat.exists():
         subprocess.Popen(['cmd', '/c', str(bat)], cwd=str(app), creationflags=NEW_CONSOLE, close_fds=True)

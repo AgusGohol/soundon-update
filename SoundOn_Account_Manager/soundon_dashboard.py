@@ -12,6 +12,16 @@ import sys
 import urllib.parse
 import base64
 import tkinter as tk
+if sys.stdout is None or sys.stderr is None:
+    # Dibuka dengan pythonw (tanpa jendela cmd): pesan galat dicatat ke file.
+    try:
+        _log_path=os.path.join(os.path.expanduser('~'),'SoundOnAccounts','app_log.txt')
+        os.makedirs(os.path.dirname(_log_path),exist_ok=True)
+        _big=os.path.exists(_log_path) and os.path.getsize(_log_path)>1_000_000
+        sys.stdout=sys.stderr=open(_log_path,'w' if _big else 'a',encoding='utf-8',buffering=1)
+        print('--- dibuka',time.strftime('%Y-%m-%d %H:%M:%S'))
+    except OSError:
+        pass
 from artist_finance import save_artist, owner_groups, available_artists, assign_artists, rename_owner, remove_owner
 
 # Izin perangkat SoundOn
@@ -37,7 +47,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.19.0'
+APP_VERSION='3.19.1'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -331,7 +341,7 @@ def open_account(a, target_url=URL):
                           '--disable-background-timer-throttling',
                           '--disable-renderer-backgrounding',
                           '--disable-backgrounding-occluded-windows',
-                          '--new-window',target_url])
+                          '--new-window',target_url],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         for delay in (3000,8000,15000):root.after(delay,poll_chrome_status)
         return True
     except OSError as ex:
@@ -1437,8 +1447,11 @@ def restart_app():
     """Buka ulang aplikasi (dipakai saat mengganti mode tampilan)."""
     app_dir=os.path.dirname(os.path.abspath(__file__))
     bat=os.path.join(app_dir,'run_app.bat')
+    import updater as _upd
     try:
-        if os.name=='nt' and os.path.exists(bat):
+        if _upd.app_command(app_dir):
+            subprocess.Popen(_upd.app_command(app_dir),cwd=app_dir,creationflags=_upd.DETACHED|_upd.CREATE_NO_WINDOW,close_fds=True)
+        elif os.name=='nt' and os.path.exists(bat):
             subprocess.Popen(['cmd','/c',bat],cwd=app_dir,creationflags=getattr(subprocess,'CREATE_NEW_CONSOLE',0),close_fds=True)
         else:
             subprocess.Popen([sys.executable,os.path.join(app_dir,'soundon_dashboard.py')],cwd=app_dir)

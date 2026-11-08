@@ -309,7 +309,8 @@ class Syncer:
                           # Jendela diperkecil tetap diproses normal (tanpa perlambatan latar).
                           '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
                           '--disable-backgrounding-occluded-windows',
-                          '--no-first-run', '--no-default-browser-check', 'about:blank'])
+                          '--no-first-run', '--no-default-browser-check', 'about:blank'],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)   # log Chrome tidak ke konsol
         for _ in range(80):
             self._sleep(0.5)
             if self.ready(a):
