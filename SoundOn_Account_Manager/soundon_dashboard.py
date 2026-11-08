@@ -47,7 +47,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.20.1'
+APP_VERSION='3.20.2'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -1159,9 +1159,14 @@ def finish_regions(a,period,artist_id,regions,url):
     us=next((x['percent'] for x in regions if x['code'] in ('US','USA')),None)
     idn=next((x['percent'] for x in regions if x['code'] in ('ID','IDN')),None)
     fmt=lambda x: ('—' if x is None else f'{x:.2f}%'.replace('.',','))
-    messagebox.showinfo('Asal Streams tersimpan',
-        f'{a["name"]} · {name.strip()}\n🇮🇩 Indonesia: {fmt(idn)}\n🇺🇸 Amerika Serikat: {fmt(us)}\n'
-        f'Periode dikonfirmasi: {start} – {end}\n{len(regions)} wilayah terbaca.',parent=root)
+    text=(f'{a["name"]} · {name.strip()}\n🇮🇩 Indonesia: {fmt(idn)}\n🇺🇸 Amerika Serikat: {fmt(us)}\n'
+          f'Periode dikonfirmasi: {start} – {end}\n{len(regions)} wilayah terbaca.')
+    warn=DC.region_warnings(idn,us)
+    if warn:
+        messagebox.showwarning('Peringatan Asal Streams',text+'\n\n⚠ '+' dan '.join(warn).replace('AS','Amerika Serikat').replace('ID','Indonesia')
+                               +'. Periksa artis ini.',parent=root)
+    else:
+        messagebox.showinfo('Asal Streams tersimpan',text,parent=root)
 
 # Saldo di "Penghasilan Saya" bisa disembunyikan (****) dengan ikon mata. Cari teks bintang
 # yang terlihat lalu kembalikan posisi ikon terdekat di sebelahnya untuk diklik.
@@ -1940,28 +1945,12 @@ def render_active_page():
         if not accounts and not owners:label(page_body,'Klik Tambah Pemilik atau Tambah Akun untuk memulai.',12,DIM).pack(pady=20)
     elif active_page=='Analytics':
         # Periode sama dengan Dashboard (satu periode untuk semua menu).
-        global analytics_vars
-        if 'analytics_vars' not in globals():
-            analytics_vars={'show':tk.StringVar(value='Sudah dibaca'),'cat':tk.StringVar(value='Semua Kategori'),
-                            'sort':tk.StringVar(value='Indonesia % tertinggi'),'q':tk.StringVar()}
+        analytics_vars=get_analytics_vars()
         try:
             selected_start=parse_date(start_var.get());selected_end=parse_date(end_var.get())
         except ValueError:
             selected_start=selected_end=date.today()
-        def readings(a):
-            """Pembacaan Asal Streams akun ini untuk periode & platform terpilih (satu per artis, terbaru)."""
-            unique={}
-            for rec in sorted(a.get('region_records',[]),key=lambda x:x.get('updated','')):
-                if rec.get('platform')!=platform or rec.get('start')!=str(selected_start) or rec.get('end')!=str(selected_end):continue
-                unique[(rec.get('artist_id') or rec.get('artist_name'))]=rec
-            out=[]
-            for rec in unique.values():
-                regions={str(v.get('code','')).upper():v.get('percent') for v in rec.get('regions',[])}
-                pick=lambda codes:next((float(regions[c]) for c in codes if regions.get(c) is not None),None)
-                out.append({'artist':rec.get('artist_name') or 'Artis','id_pct':pick(('ID','IDN')),'us_pct':pick(('US','USA')),
-                            'updated':short_time(rec.get('updated'))})
-            return out
-        data=[(a,latest(a,selected_start,selected_end,platform),readings(a)) for a in accounts]
+        data=[(a,latest(a,selected_start,selected_end,platform),region_readings(a,selected_start,selected_end,platform)) for a in accounts]
         all_reads=[x for _,_,rs in data for x in rs]
         def mean(key):
             vals=[x[key] for x in all_reads if x[key] is not None]
@@ -1975,14 +1964,17 @@ def render_active_page():
         label(controls,'Samakan periode di Artist Insights SoundOn sebelum membaca data.',9,MUTED).pack(side='left',padx=14)
         tiles=tk.Frame(intro,bg=PANEL);tiles.pack(fill='x',pady=(0,4))
         read_accounts=sum(1 for _,_,rs in data if rs)
+        warned=[x for x in all_reads if DC.region_warnings(x['id_pct'],x['us_pct'])]
         for i,(title,icon,value,sub) in enumerate([
                 ('Akun sudah dibaca','users',f'{read_accounts}/{len(accounts)}',f'{len(accounts)-read_accounts} akun belum dibaca'),
                 ('Rata-rata Indonesia','flag',pct(mean('id_pct')),'dari semua artis terbaca'),
-                ('Rata-rata Amerika Serikat','globe',pct(mean('us_pct')),'dari semua artis terbaca'),
-                ('Artis terbaca','music',str(len(all_reads)),'pada periode ini')]):
+                ('Rata-rata AS','globe',pct(mean('us_pct')),'dari semua artis terbaca'),
+                ('Artis terbaca','music',str(len(all_reads)),'pada periode ini'),
+                ('Peringatan','alert',str(len(warned)),f'AS > {DC.WARN_US}% atau ID > {DC.WARN_ID}%')]):
             card=DC.StatCard(tiles,title,icon,height=118);card.grid(row=0,column=i,sticky='nsew',padx=(0 if i==0 else 6,0))
             tiles.grid_columnconfigure(i,weight=1,uniform='an')
-            card.set(value,sub)
+            if title=='Peringatan' and warned:card.set(value,sub,'Periksa',RED)
+            else:card.set(value,sub)
         # Filter (hanya tabel yang diperbarui; kolom pencarian tidak dibangun ulang).
         listing=page_section(page_body,'Per artis','Klik Baca untuk membaca Asal Streams akun itu, atau Buka untuk membuka Analytics SoundOn.','chart',PURPLE)
         bar_f=tk.Frame(listing,bg=PANEL);bar_f.pack(fill='x',pady=(0,10))
@@ -1992,7 +1984,7 @@ def render_active_page():
             for trace in var.trace_info():
                 try:var.trace_remove(*trace)
                 except tk.TclError:pass
-        for var,values,width in [(v['show'],['Sudah dibaca','Belum dibaca','Semua akun'],14),
+        for var,values,width in [(v['show'],['Sudah dibaca','Ada peringatan','Belum dibaca','Semua akun'],15),
                                  (v['cat'],['Semua Kategori']+categories,17),
                                  (v['sort'],['Indonesia % tertinggi','Amerika Serikat % tertinggi','Nama A–Z'],24)]:
             ttk.Combobox(bar_f,textvariable=var,values=values,state='readonly',style='Dark.TCombobox',width=width).pack(side='left',padx=(0,8))
@@ -2005,6 +1997,9 @@ def render_active_page():
                 if cat!='Semua Kategori' and account_category(a)!=cat:continue
                 if show=='Sudah dibaca' and not rs:continue
                 if show=='Belum dibaca' and rs:continue
+                if show=='Ada peringatan':
+                    rs=[x for x in rs if DC.region_warnings(x['id_pct'],x['us_pct'])]
+                    if not rs:continue
                 if q and q not in a['name'].casefold() and not any(q in x['artist'].casefold() for x in rs):continue
                 picked.append((a,r,rs))
             if key=='Nama A–Z':picked.sort(key=lambda x:x[0]['name'].casefold())
@@ -2454,6 +2449,34 @@ def monthly_series(members,key,platform,months=6):
         out.append(total)
     return out
 
+def region_readings(a,start,end,platform):
+    """Pembacaan Asal Streams akun untuk periode & platform (satu per artis, terbaru):
+    [{'artist','id_pct','us_pct','updated'}]."""
+    unique={}
+    for rec in sorted(a.get('region_records',[]),key=lambda x:x.get('updated','')):
+        if rec.get('platform')!=platform or rec.get('start')!=str(start) or rec.get('end')!=str(end):continue
+        unique[(rec.get('artist_id') or rec.get('artist_name'))]=rec
+    out=[]
+    for rec in unique.values():
+        regions={str(v.get('code','')).upper():v.get('percent') for v in rec.get('regions',[])}
+        pick=lambda codes:next((float(regions[c]) for c in codes if regions.get(c) is not None),None)
+        out.append({'artist':rec.get('artist_name') or 'Artis','id_pct':pick(('ID','IDN')),'us_pct':pick(('US','USA')),
+                    'updated':short_time(rec.get('updated'))})
+    return out
+
+_analytics_vars={}
+def get_analytics_vars():
+    """Filter halaman Analytics (tetap selama aplikasi terbuka)."""
+    if not _analytics_vars:
+        _analytics_vars.update(show=tk.StringVar(value='Sudah dibaca'),cat=tk.StringVar(value='Semua Kategori'),
+                               sort=tk.StringVar(value='Indonesia % tertinggi'),q=tk.StringVar())
+    return _analytics_vars
+
+def open_region_warnings():
+    """Buka Analytics dengan filter "Ada peringatan"."""
+    v=get_analytics_vars();v['q'].set('');v['show'].set('Ada peringatan')
+    switch_page('Analytics')
+
 BULAN_PENDEK=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
 def _last_months(n=6):
     y,m=date.today().year,date.today().month;out=[]
@@ -2495,6 +2518,11 @@ def update_overview(start,end,platform):
     series_all=monthly_series(accounts,'streams',platform)
     text,col=_change(series_all)
     if text:UI.pill(hero_chip,text+' '+_last_months()[-2],col,BG).pack(side='left')
+    warned=sum(1 for a in accounts for x in region_readings(a,start,end,platform) if DC.region_warnings(x['id_pct'],x['us_pct']))
+    if warned:
+        chip=UI.pill(hero_chip,f'⚠ {warned} artis perlu dicek (AS > {DC.WARN_US}% / ID > {DC.WARN_ID}%)',RED,BG)
+        chip.configure(cursor='hand2');chip.bind('<ButtonRelease-1>',lambda e:open_region_warnings())
+        chip.pack(side='left',padx=(8,0))
     hero_sub.set(f'Indonesia: {number(total(ind,"streams"))}   ·   Amerika Serikat: {number(total(usa,"streams"))}   ·   {len(accounts)} akun')
     months=_last_months()
     for country,members in (('Indonesia',ind),('Amerika Serikat',usa)):

@@ -296,3 +296,10 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Ringkasan di atas: jumlah akun yang sudah dibaca, rata-rata persentase Indonesia dan Amerika Serikat, dan jumlah artis terbaca pada periode terpilih.
 - Satu tabel ringkas, satu baris per artis: akun, artis, batang Indonesia dan Amerika Serikat dengan persentasenya, Streams akun, waktu dibaca, serta tombol Buka dan Baca. Kartu besar per akun dihapus.
 - Filter: Sudah dibaca (bawaan) / Belum dibaca / Semua akun, kategori, urutan (Indonesia % tertinggi, Amerika Serikat % tertinggi, Nama A–Z), dan pencarian akun atau artis.
+
+
+3.20.2: Peringatan Asal Streams (Amerika Serikat > 80% atau Indonesia > 30%).
+- Analytics: artis dengan Amerika Serikat lebih dari 80% atau Indonesia lebih dari 30% ditandai merah dengan label "⚠ AS > 80%" / "⚠ ID > 30%"; persentase yang melewati batas ikut merah.
+- Kartu ringkasan "Peringatan" menampilkan jumlah artis yang perlu dicek, dan filter baru "Ada peringatan" hanya menampilkan artis tersebut.
+- Dashboard: label merah "⚠ N artis perlu dicek" di samping Total Streams; klik untuk langsung membuka Analytics dengan filter "Ada peringatan".
+- Setelah "Baca Asal Streams", pesan berubah menjadi peringatan bila hasilnya melewati batas.

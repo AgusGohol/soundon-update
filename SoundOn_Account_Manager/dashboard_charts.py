@@ -15,6 +15,19 @@ from ui_theme import (PANEL, CARD, WHITE, DIM, MUTED, PURPLE, GREEN, RED, INK, T
                       mix, rounded_rect, draw_icon, text_width)
 
 ACCENT = PURPLE                     # aksen utama (merah-oranye pada mode gelap)
+# Batas peringatan Asal Streams per artis (persen, "lebih dari").
+WARN_US = 80
+WARN_ID = 30
+
+
+def region_warnings(id_pct, us_pct):
+    """Daftar peringatan untuk satu artis, mis. ['AS > 80%']."""
+    out = []
+    if us_pct is not None and us_pct > WARN_US:
+        out.append('AS > %d%%' % WARN_US)
+    if id_pct is not None and id_pct > WARN_ID:
+        out.append('ID > %d%%' % WARN_ID)
+    return out
 SECOND = WHITE if THEME == 'dark' else '#3f3f46'
 
 
@@ -412,7 +425,7 @@ class RegionTable(tk.Canvas):
         self._bg = parent.cget('bg')
         super().__init__(parent, height=self.HEAD + self.ROW, bg=self._bg, highlightthickness=0, bd=0)
         self.on_open, self.on_read = on_open, on_read
-        self.rows, self._hits, self._hover = [], [], None
+        self.rows, self._hits, self._hover, self._base = [], [], None, {}
         self.bind('<Configure>', lambda e: self.redraw())
         self.bind('<Motion>', self._motion)
         self.bind('<Leave>', lambda e: self._set_hover(None))
@@ -455,7 +468,9 @@ class RegionTable(tk.Canvas):
     def _row(self, i, r, cols, w):
         y0 = self.HEAD + i * self.ROW
         cy = y0 + self.ROW / 2
-        bg = mix(self._bg, INK, 0.05) if i == self._hover else self._bg
+        warn = region_warnings(r.get('id_pct'), r.get('us_pct')) if r.get('artist') else []
+        self._base[i] = mix(self._bg, RED, 0.07) if warn else self._bg
+        bg = mix(self._base[i], INK, 0.05) if i == self._hover else self._base[i]
         self.create_rectangle(0, y0, w, y0 + self.ROW, fill=bg, outline='', tags=('rowbg', 'rowbg%d' % i))
         if r.get('first', True):
             self.create_line(8, y0, w - 8, y0, fill=mix(self._bg, INK, 0.08))
@@ -470,10 +485,15 @@ class RegionTable(tk.Canvas):
             self.create_text(sx + 14, cy, text=r.get('streams', '—'), fill=DIM, font=_font(9), anchor='w')
         ax, aw, _ = cols['artis']
         if r.get('artist'):
-            self.create_text(ax + 14, cy, text=_fit(r['artist'], _font(10), aw - 20), fill=WHITE, font=_font(10), anchor='w')
+            self.create_text(ax + 14, cy - (8 if warn else 0), text=_fit(r['artist'], _font(10), aw - 20), fill=WHITE,
+                             font=_font(10), anchor='w')
+            if warn:
+                self.create_text(ax + 14, cy + 10, text='⚠ ' + ' · '.join(warn), fill=RED, font=_font(8, True), anchor='w')
             for key, col in (('id', GREEN), ('us', ACCENT)):
                 x, cw, _ = cols[key]
                 v = r.get(key + '_pct')
+                if v is not None and v > (WARN_ID if key == 'id' else WARN_US):
+                    col = RED
                 bx0, bx1 = x + 14, x + cw - 70
                 rounded_rect(self, bx0, cy - 3, bx1, cy + 3, 3, mix(self._bg, INK, 0.09))
                 if v is not None and bx1 > bx0:
@@ -503,7 +523,8 @@ class RegionTable(tk.Canvas):
         if i != self._hover:
             for j in (self._hover, i):
                 if j is not None:
-                    self.itemconfigure('rowbg%d' % j, fill=mix(self._bg, INK, 0.05) if j == i else self._bg)
+                    base = self._base.get(j, self._bg)
+                    self.itemconfigure('rowbg%d' % j, fill=mix(base, INK, 0.05) if j == i else base)
             self._hover = i
 
     def _motion(self, e):

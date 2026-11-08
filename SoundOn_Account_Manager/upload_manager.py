@@ -103,7 +103,7 @@ class UploadManager:
             if job.get('status') == 'Memproses':
                 job['status'] = 'Terputus — periksa browser sebelum melanjutkan'
         self.window = tk.Toplevel(root)
-        self.window.title('SoundOn 3.20.1 — Studio unggah')
+        self.window.title('SoundOn 3.20.2 — Studio unggah')
         self.window.geometry('1120x740');self.window.minsize(920,600)
         self.window.configure(bg=BG)
         self.window.protocol('WM_DELETE_WINDOW', self.close)
