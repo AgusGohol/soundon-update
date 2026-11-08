@@ -303,3 +303,9 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Kartu ringkasan "Peringatan" menampilkan jumlah artis yang perlu dicek, dan filter baru "Ada peringatan" hanya menampilkan artis tersebut.
 - Dashboard: label merah "⚠ N artis perlu dicek" di samping Total Streams; klik untuk langsung membuka Analytics dengan filter "Ada peringatan".
 - Setelah "Baca Asal Streams", pesan berubah menjadi peringatan bila hasilnya melewati batas.
+
+
+3.20.3: Penghasilan lebih mudah dibaca.
+- Ringkasan di atas: total saldo Rupiah, total saldo Dolar AS, jumlah akun yang punya saldo, akun yang belum dibaca, dan saldo terbesar.
+- Satu tabel saldo per akun, dikelompokkan per mata uang (dengan subtotal) dan diurutkan dari saldo terbesar, lengkap dengan batang perbandingan, waktu diperbarui, serta tombol Buka dan Baca Saldo.
+- Filter negara, status saldo (Ada saldo / Saldo 0 / Belum dibaca), urutan, dan pencarian akun. IDR dan USD tetap tidak dijumlahkan.

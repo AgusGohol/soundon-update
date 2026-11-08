@@ -45,9 +45,9 @@ STREAMS_URL = 'https://www.soundon.global/library/analytics?endTime=now-2&startT
 os.makedirs(BASE, exist_ok=True)
 import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
-from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
+from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.20.2'
+APP_VERSION='3.20.3'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -2022,98 +2022,80 @@ def render_active_page():
         update_table()
         if not accounts:label(page_body,'Belum ada akun.',12,DIM).pack(pady=20)
     elif active_page=='Penghasilan':
-        # Two independent currencies: never add USD to IDR without a real exchange rate.
-        def balance_known(a):
-            return bool(a.get('balance_updated'))
-
-        def balance_amount(a):
+        # Dua mata uang terpisah: USD tidak pernah dijumlahkan ke IDR tanpa kurs nyata.
+        def known(a):return bool(a.get('balance_updated'))
+        def amount(a):
             try:return float(a.get('balance') or 0)
             except (ValueError,TypeError):return 0.0
-
-        def currency_of(a):
-            return str(a.get('currency') or 'IDR').upper()
-
-        def currency_total(members,currency):
-            return sum(balance_amount(a) for a in members if currency_of(a)==currency and balance_known(a))
-
-        def money_or_dash(a):
-            return account_money(a) if balance_known(a) else 'Belum dibaca'
-
-        def earnings_card(parent,caption,value,subtitle,accent,icon_name):
-            outer=UI.RoundedPanel(parent,outer=PANEL,color=CARD,radius=12)
-            outer.pack(side='left',fill='both',expand=True,padx=6)
-            inner=tk.Frame(outer,bg=CARD);inner.pack(fill='both',expand=True,padx=18,pady=16)
-            top=tk.Frame(inner,bg=CARD);top.pack(fill='x')
-            icon_badge(top,icon_name,accent,CARD,34).pack(side='left',padx=(0,10))
-            label(top,caption,9,DIM).pack(side='left')
-            label(inner,value,20,WHITE,bold=True).pack(anchor='w',pady=(12,2))
-            label(inner,subtitle,9,MUTED).pack(anchor='w')
-            return outer
-
-        heading=tk.Frame(page_body,bg=PANEL);heading.pack(fill='x',padx=18,pady=(18,6))
-        icon_badge(heading,'wallet',GREEN,PANEL,34).pack(side='left',padx=(0,12))
-        heading_left=tk.Frame(heading,bg=PANEL);heading_left.pack(side='left',fill='x',expand=True)
-        label(heading_left,'Ringkasan Penghasilan',13,bold=True).pack(anchor='w')
-        label(heading_left,'Saldo tersedia dari pembacaan terakhir · IDR dan USD ditampilkan terpisah.',9,DIM).pack(anchor='w',pady=(2,0))
-        button(heading,'⟳  Refresh',render_active_page).pack(side='right',padx=(8,0))
-
-        indonesia=[a for a in accounts if account_category(a).casefold()=='indonesia']
-        usa=[a for a in accounts if account_category(a).casefold() in ('amerika serikat','united states','usa','us')]
-        other=[a for a in accounts if a not in indonesia and a not in usa]
-        summary=tk.Frame(page_body,bg=PANEL);summary.pack(fill='x',padx=11,pady=(13,18))
-        earnings_card(summary,'Total saldo Indonesia',money(currency_total(indonesia,'IDR'),'IDR'),f'{len(indonesia)} akun · Rupiah',RED,'flag')
-        earnings_card(summary,'Total saldo Amerika Serikat',money(currency_total(usa,'USD'),'USD'),f'{len(usa)} akun · Dolar AS',BLUE,'globe')
-        earnings_card(summary,'Akun terdaftar',str(len(accounts)),f'{len(indonesia)} Indonesia · {len(usa)} Amerika Serikat',AMBER,'users')
-
-        def country_panel(parent,title,members,currency,accent,icon_name):
-            shell=UI.RoundedPanel(parent,outer=PANEL,color=CARD,radius=12)
-            shell.pack(side='left',fill='both',expand=True,padx=6,anchor='n')
-            header=tk.Frame(shell,bg=CARD);header.pack(fill='x',padx=16,pady=(16,12))
-            icon_badge(header,icon_name,accent,CARD,36).pack(side='left',padx=(0,12))
-            titlebox=tk.Frame(header,bg=CARD);titlebox.pack(side='left',fill='x',expand=True)
-            label(titlebox,title,13,bold=True).pack(anchor='w')
-            label(titlebox,f'{len(members)} akun  ·  Saldo tersedia',9,DIM).pack(anchor='w',pady=(2,0))
-            label(header,money(currency_total(members,currency),currency),15,WHITE,bold=True).pack(side='right')
-            table=tk.Frame(shell,bg=CARD);table.pack(fill='x',padx=12,pady=(0,14))
-            table.grid_columnconfigure(1,weight=1)
-            for col,(text,anchor) in enumerate([('#','w'),('AKUN','w'),(f'SALDO ({currency})','e'),('','e')]):
-                tk.Label(table,text=text,font=(FONT,8,'bold'),fg=MUTED,bg=CARD_HI,anchor=anchor,padx=10,pady=9).grid(row=0,column=col,sticky='nsew')
-            if not members:
-                label(table,'Belum ada akun dalam kategori ini.',10,MUTED).grid(row=1,column=0,columnspan=4,pady=24)
-            for i,a in enumerate(sorted(members,key=lambda x:x.get('name','').casefold()),1):
-                r=i*2-1
-                label(table,str(i),9,MUTED).grid(row=r,column=0,sticky='w',padx=10,pady=10)
-                name=tk.Frame(table,bg=CARD);name.grid(row=r,column=1,sticky='w',padx=10,pady=8)
-                label(name,short_name(a.get('name','Akun'),26),10,bold=True).pack(anchor='w')
-                updated=a.get('balance_updated') or ''
-                label(name,('Diperbarui '+short_time(updated)) if updated else 'Belum ada pembacaan saldo',8,MUTED).pack(anchor='w',pady=(1,0))
-                label(table,money_or_dash(a),10,GREEN if balance_known(a) else MUTED,bold=balance_known(a),anchor='e').grid(row=r,column=2,sticky='e',padx=10)
-                actions=tk.Frame(table,bg=CARD)
-                actions.grid(row=r,column=3,sticky='e',padx=(4,6))
-                button(actions,'↗  Buka',lambda a=a:open_balance(a),font_size=9,height=30,padx=10).pack(side='left',padx=(0,5))
-                button(actions,'Baca Saldo',lambda a=a:read_visible(a,'balance'),True,icon='sync',font_size=9,height=30,padx=10).pack(side='left')
-                tk.Frame(table,bg=LINE,height=1).grid(row=r+1,column=0,columnspan=4,sticky='ew')
-            return shell
-
-        countries=tk.Frame(page_body,bg=PANEL);countries.pack(fill='x',padx=11,pady=(0,16))
-        country_panel(countries,'Indonesia',indonesia,'IDR',RED,'flag')
-        country_panel(countries,'Amerika Serikat',usa,'USD',BLUE,'globe')
-
-        if other:
-            extra=page_section(page_body,'Kategori Lain',f'{len(other)} akun di luar kategori Indonesia dan Amerika Serikat.','tag',AMBER)
-            for a in sorted(other,key=lambda x:x.get('name','').casefold()):
-                row=tk.Frame(extra,bg=PANEL);row.pack(fill='x',pady=4)
-                label(row,a.get('name','Akun'),10,bold=True).pack(side='left')
-                label(row,'  ·  '+account_category(a),9,DIM).pack(side='left')
-                button(row,'Baca Saldo',lambda a=a:read_visible(a,'balance'),True,icon='sync',font_size=9,height=30).pack(side='right')
-                button(row,'↗  Buka',lambda a=a:open_balance(a),font_size=9,height=30).pack(side='right',padx=6)
-                label(row,money_or_dash(a),10,GREEN if balance_known(a) else MUTED).pack(side='right',padx=16)
-
-        footer_box=UI.RoundedPanel(page_body,outer=PANEL,color=mix_card(BLUE),radius=10);footer_box.pack(fill='x',padx=17,pady=(3,19))
-        footer=tk.Frame(footer_box,bg=mix_card(BLUE));footer.pack(fill='x',padx=16,pady=12)
-        UI.icon(footer,'info',18,BLUE,mix_card(BLUE)).pack(side='left',anchor='n',padx=(0,10),pady=2)
-        label(footer,'Saldo tersedia bukan pendapatan periode. Nilai IDR dan USD tidak dijumlahkan atau dikonversi secara otomatis. '
-            'Klik Baca Saldo setelah membuka akun dan login di Chrome.',9,DIM,wraplength=1000,justify='left').pack(side='left',anchor='w')
+        def cur(a):return str(a.get('currency') or 'IDR').upper()
+        def total(members,c):return sum(amount(a) for a in members if cur(a)==c and known(a))
+        intro=page_section(page_body,'Ringkasan Saldo','Saldo tersedia dari pembacaan terakhir. IDR dan USD ditampilkan terpisah, tidak dikonversi.','wallet',GREEN)
+        tiles=tk.Frame(intro,bg=PANEL);tiles.pack(fill='x',pady=(0,4))
+        idr=[a for a in accounts if cur(a)=='IDR'];usd=[a for a in accounts if cur(a)=='USD']
+        with_balance=[a for a in accounts if known(a) and amount(a)>0]
+        unread=[a for a in accounts if not known(a)]
+        top=max((a for a in accounts if known(a) and cur(a)=='IDR'),key=amount,default=None)
+        synced=[a.get('balance_updated') for a in accounts if known(a)]
+        for i,(title,icon,value,sub,chip,col) in enumerate([
+                ('Total saldo Rupiah','flag',money(total(accounts,'IDR'),'IDR'),f'{len(idr)} akun IDR','',GREEN),
+                ('Total saldo Dolar AS','globe',money(total(accounts,'USD'),'USD'),f'{len(usd)} akun USD','',GREEN),
+                ('Akun punya saldo','users',f'{len(with_balance)}/{len(accounts)}',('Sinkron terakhir '+short_time(max(synced))) if synced else 'Belum ada pembacaan','',GREEN),
+                ('Belum dibaca','alert',str(len(unread)),'klik Baca Saldo pada akunnya','Baca' if unread else '',AMBER),
+                ('Saldo terbesar','wallet',money(amount(top),'IDR') if top else '—',short_name(top['name'],22) if top else 'Rupiah','',GREEN)]):
+            card=DC.StatCard(tiles,title,icon,height=118);card.grid(row=0,column=i,sticky='nsew',padx=(0 if i==0 else 6,0))
+            tiles.grid_columnconfigure(i,weight=1,uniform='pg')
+            card.set(value,sub,chip,col)
+        listing=page_section(page_body,'Saldo per akun','Dikelompokkan per mata uang dan diurutkan dari saldo terbesar. Klik Baca Saldo untuk memperbarui satu akun.','chart',PURPLE)
+        v=get_earnings_vars()
+        for var in v.values():
+            for trace in var.trace_info():
+                try:var.trace_remove(*trace)
+                except tk.TclError:pass
+        bar_f=tk.Frame(listing,bg=PANEL);bar_f.pack(fill='x',pady=(0,10))
+        for var,values,width in [(v['country'],['Semua negara','Indonesia','Amerika Serikat','Kategori lain'],16),
+                                 (v['show'],['Semua akun','Ada saldo','Saldo 0','Belum dibaca'],13),
+                                 (v['sort'],['Saldo terbesar','Saldo terkecil','Nama A–Z','Terakhir diperbarui'],18)]:
+            ttk.Combobox(bar_f,textvariable=var,values=values,state='readonly',style='Dark.TCombobox',width=width).pack(side='left',padx=(0,8))
+        UI.search_entry(bar_f,v['q'],'Cari akun…',width=24).pack(side='right')
+        table=DC.BalanceTable(listing,open_balance,lambda a:read_visible(a,'balance'));table.pack(fill='x')
+        def rows():
+            q=v['q'].get().strip().casefold();country=v['country'].get();show=v['show'].get();key=v['sort'].get()
+            picked=[]
+            for a in accounts:
+                if country=='Indonesia' and not in_country(a,'Indonesia'):continue
+                if country=='Amerika Serikat' and not in_country(a,'Amerika Serikat'):continue
+                if country=='Kategori lain' and (in_country(a,'Indonesia') or in_country(a,'Amerika Serikat')):continue
+                if show=='Ada saldo' and not (known(a) and amount(a)>0):continue
+                if show=='Saldo 0' and not (known(a) and amount(a)==0):continue
+                if show=='Belum dibaca' and known(a):continue
+                if q and q not in a['name'].casefold() and q not in str(a['id']):continue
+                picked.append(a)
+            out=[]
+            for c,title in (('IDR','Rupiah (IDR)'),('USD','Dolar AS (USD)')):
+                group=[a for a in picked if cur(a)==c]
+                if not group:continue
+                if key=='Nama A–Z':group.sort(key=lambda a:a['name'].casefold())
+                elif key=='Terakhir diperbarui':group.sort(key=lambda a:a.get('balance_updated',''),reverse=True)
+                else:group.sort(key=lambda a:(known(a),amount(a)),reverse=key=='Saldo terbesar')
+                hi=max([amount(a) for a in group if known(a)] or [0]) or 1
+                out.append({'kind':'group','title':title,'count':len(group),'total':money(total(group,c),c)})
+                for n,a in enumerate(group):
+                    out.append({'kind':'account','account':a,'name':a['name'],'sub':f'{account_category(a)} · #{a["id"]}',
+                                'value':account_money(a),'part':amount(a)/hi if known(a) else 0,'known':known(a),
+                                'top':known(a) and amount(a)==hi and amount(a)>0,
+                                'updated':short_time(a.get('balance_updated')) if known(a) else '',
+                                'accent':ACCENTS[n%len(ACCENTS)]})
+            others=[a for a in picked if cur(a) not in ('IDR','USD')]
+            if others:
+                out.append({'kind':'group','title':'Mata uang lain','count':len(others),'total':''})
+                for n,a in enumerate(sorted(others,key=lambda a:a['name'].casefold())):
+                    out.append({'kind':'account','account':a,'name':a['name'],'sub':account_category(a),'value':account_money(a),
+                                'part':0,'known':known(a),'updated':short_time(a.get('balance_updated')) if known(a) else '','accent':PURPLE})
+            return out
+        def update_table(*_):
+            if table.winfo_exists():table.set(rows())
+        for var in v.values():var.trace_add('write',update_table)
+        update_table()
     elif active_page=='Inventaris HP':
         intro=page_section(page_body,'Inventaris Perangkat',
             'HP yang digunakan pada akun dihitung otomatis dari Daftar Akun. HP lainnya dapat dicatat di bawah.','phone',PURPLE)
@@ -2471,6 +2453,14 @@ def get_analytics_vars():
         _analytics_vars.update(show=tk.StringVar(value='Sudah dibaca'),cat=tk.StringVar(value='Semua Kategori'),
                                sort=tk.StringVar(value='Indonesia % tertinggi'),q=tk.StringVar())
     return _analytics_vars
+
+_earnings_vars={}
+def get_earnings_vars():
+    """Filter halaman Penghasilan (tetap selama aplikasi terbuka)."""
+    if not _earnings_vars:
+        _earnings_vars.update(country=tk.StringVar(value='Semua negara'),show=tk.StringVar(value='Semua akun'),
+                              sort=tk.StringVar(value='Saldo terbesar'),q=tk.StringVar())
+    return _earnings_vars
 
 def open_region_warnings():
     """Buka Analytics dengan filter "Ada peringatan"."""

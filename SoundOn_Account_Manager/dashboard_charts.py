@@ -539,6 +539,132 @@ class RegionTable(tk.Canvas):
                 return
 
 
+class BalanceTable(tk.Canvas):
+    """Tabel saldo: baris kelompok mata uang + baris akun.
+
+    rows = [dict(kind='group', title, total, count)] atau
+           [dict(kind='account', account, name, sub, value, part 0..1, known, updated, accent)]"""
+    HEAD, ROW, GROUP = 38, 50, 40
+
+    def __init__(self, parent, on_open, on_read):
+        self._bg = parent.cget('bg')
+        super().__init__(parent, height=self.HEAD + self.ROW, bg=self._bg, highlightthickness=0, bd=0)
+        self.on_open, self.on_read = on_open, on_read
+        self.rows, self._hits, self._ys, self._hover = [], [], [], None
+        self.bind('<Configure>', lambda e: self.redraw())
+        self.bind('<Motion>', self._motion)
+        self.bind('<Leave>', lambda e: self._set_hover(None))
+        self.bind('<ButtonRelease-1>', self._click)
+
+    def set(self, rows):
+        self.rows = list(rows)
+        h = self.HEAD + sum(self.GROUP if r['kind'] == 'group' else self.ROW for r in self.rows) + 8
+        self.configure(height=max(h, self.HEAD + self.ROW))
+        self.redraw()
+
+    def _cols(self, w):
+        act = 176
+        rest = max(400, w - act)
+        spec = [('no', '#', 0.05), ('akun', 'AKUN', 0.33), ('saldo', 'SALDO TERSEDIA', 0.42), ('upd', 'DIPERBARUI', 0.2)]
+        x, cols = 0, {}
+        for key, title, part in spec:
+            cols[key] = (x, rest * part, title)
+            x += rest * part
+        cols['aksi'] = (x, act, '')
+        return cols
+
+    def redraw(self):
+        self.delete('all')
+        w = self.winfo_width()
+        if w < 50:
+            return
+        cols = self._cols(w)
+        rounded_rect(self, 0, 0, w, self.HEAD, 10, mix(self._bg, INK, 0.06))
+        for key, (x, cw, title) in cols.items():
+            if title:
+                self.create_text(x + 14, self.HEAD / 2, text=title, fill=MUTED, font=_font(8, True), anchor='w')
+        self._hits, self._ys = [], []
+        if not self.rows:
+            self.create_text(w / 2, self.HEAD + 26, text='Tidak ada akun yang cocok dengan filter.', fill=MUTED, font=_font(10))
+            return
+        y, n = self.HEAD, 0
+        for i, r in enumerate(self.rows):
+            if r['kind'] == 'group':
+                self.create_text(14, y + self.GROUP / 2 + 4, text=r['title'], fill=WHITE, font=_font(10, True), anchor='w')
+                self.create_text(14 + text_width(_font(10, True), r['title']) + 12, y + self.GROUP / 2 + 4,
+                                 text='%d akun' % r['count'], fill=MUTED, font=_font(9), anchor='w')
+                self.create_text(w - 14, y + self.GROUP / 2 + 4, text=r['total'], fill=WHITE, font=_font(11, True), anchor='e')
+                self._ys.append((y, y + self.GROUP, None))
+                y += self.GROUP
+                n = 0
+                continue
+            n += 1
+            self._row(i, r, n, y, cols, w)
+            self._ys.append((y, y + self.ROW, i))
+            y += self.ROW
+
+    def _row(self, i, r, n, y0, cols, w):
+        cy = y0 + self.ROW / 2
+        bg = mix(self._bg, INK, 0.05) if i == self._hover else self._bg
+        self.create_rectangle(0, y0, w, y0 + self.ROW, fill=bg, outline='', tags=('rowbg%d' % i,))
+        self.create_line(8, y0, w - 8, y0, fill=mix(self._bg, INK, 0.07))
+        x, cw, _ = cols['no']
+        self.create_text(x + 14, cy, text=str(n), fill=MUTED, font=_font(9), anchor='w')
+        x, cw, _ = cols['akun']
+        acc = r.get('accent', ACCENT)
+        self.create_oval(x + 10, cy - 14, x + 38, cy + 14, fill=mix(self._bg, acc, 0.22), outline='')
+        self.create_text(x + 24, cy, text=(r['name'][:1] or '?').upper(), fill=mix(acc, INK, 0.3), font=_font(10, True))
+        avail = cw - 60
+        self.create_text(x + 48, cy - 8, text=_fit(r['name'], _font(10, True), avail), fill=WHITE, font=_font(10, True), anchor='w')
+        self.create_text(x + 48, cy + 10, text=_fit(r.get('sub', ''), _font(8), avail), fill=MUTED, font=_font(8), anchor='w')
+        x, cw, _ = cols['saldo']
+        known = r.get('known')
+        val_w = 130
+        bx0, bx1 = x + 14, x + cw - val_w - 10
+        if bx1 > bx0 + 20:
+            rounded_rect(self, bx0, cy - 3, bx1, cy + 3, 3, mix(self._bg, INK, 0.08))
+            if known and r.get('part', 0) > 0:
+                rounded_rect(self, bx0, cy - 3, bx0 + max(6, (bx1 - bx0) * min(1, r['part'])), cy + 3, 3,
+                             GREEN if r.get('top') else mix(GREEN, self._bg, 0.35))
+        zero = known and not r.get('part')
+        self.create_text(x + cw - 10, cy, text=r['value'] if known else 'Belum dibaca',
+                         fill=(MUTED if (not known or zero) else GREEN), font=_font(10, bool(known and not zero)), anchor='e')
+        x, cw, _ = cols['upd']
+        self.create_text(x + 14, cy, text=r.get('updated') or '—', fill=MUTED, font=_font(8), anchor='w')
+        x, aw, _ = cols['aksi']
+        right = x + aw - 10
+        for key, text, primary in (('read', 'Baca Saldo', True), ('open', 'Buka', False)):
+            bw = text_width(_font(9, True), text) + 24
+            rounded_rect(self, right - bw, cy - 14, right, cy + 14, 14, ACCENT if primary else mix(self._bg, INK, 0.1))
+            self.create_text(right - bw / 2, cy, text=text, fill='#ffffff' if primary else WHITE, font=_font(9, True))
+            self._hits.append((right - bw, cy - 14, right, cy + 14, key, r['account']))
+            right -= bw + 8
+
+    def _index(self, y):
+        for a, b, i in self._ys:
+            if a <= y < b:
+                return i
+        return None
+
+    def _set_hover(self, i):
+        if i != self._hover:
+            for j in (self._hover, i):
+                if j is not None:
+                    self.itemconfigure('rowbg%d' % j, fill=mix(self._bg, INK, 0.05) if j == i else self._bg)
+            self._hover = i
+
+    def _motion(self, e):
+        self._set_hover(self._index(e.y))
+        over = any(a <= e.x <= c and b <= e.y <= d for a, b, c, d, _, _ in self._hits)
+        self.configure(cursor='hand2' if over else '')
+
+    def _click(self, e):
+        for a, b, c, d, key, account in self._hits:
+            if a <= e.x <= c and b <= e.y <= d:
+                (self.on_read if key == 'read' else self.on_open)(account)
+                return
+
+
 def _fit(text, font, width):
     text = str(text)
     if width <= 10 or text_width(font, text) <= width:
