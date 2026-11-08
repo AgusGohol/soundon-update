@@ -35,9 +35,10 @@ def save_settings(**changes):
 
 
 PALETTES = {
-    'dark': dict(BG='#0b1220', SIDE='#09101c', PANEL='#111c2e', CARD='#172439', CARD_HI='#1d2d46',
-                 LINE='#24364f', WHITE='#eef3fb', DIM='#93a4bd', MUTED='#6b7c95', PURPLE='#7357ff',
-                 GREEN='#22c993', RED='#f25f7a', BLUE='#3d9bff', AMBER='#f2b544'),
+    # Gelap: hitam-grafit dengan aksen merah-oranye (sejak 3.20.0). PURPLE = warna aksen utama.
+    'dark': dict(BG='#0a0a0b', SIDE='#0d0d0e', PANEL='#141416', CARD='#1b1b1e', CARD_HI='#242428',
+                 LINE='#2b2b30', WHITE='#f4f4f5', DIM='#a1a1aa', MUTED='#6c6c75', PURPLE='#ff5a1f',
+                 GREEN='#2fd27a', RED='#f0435a', BLUE='#8fa8ff', AMBER='#f5b544'),
     'light': dict(BG='#eef1f7', SIDE='#ffffff', PANEL='#ffffff', CARD='#f5f7fb', CARD_HI='#eaeef5',
                   LINE='#dfe4ee', WHITE='#18213a', DIM='#56647b', MUTED='#8692a6', PURPLE='#6a4df5',
                   GREEN='#109c74', RED='#dc4560', BLUE='#2b80ea', AMBER='#c98a12'),
@@ -575,12 +576,13 @@ class NavItem(tk.Canvas):
         if w <= 1:
             return
         if self.active:
-            rounded_rect(self, 0.5, 0.5, w - 0.5, h - 0.5, 10, mix(SIDE, PURPLE, 0.22 if THEME == 'dark' else 0.12))
+            # Menu aktif: permukaan abu netral + garis aksen kecil (gaya hitam-grafit).
+            rounded_rect(self, 0.5, 0.5, w - 0.5, h - 0.5, 10, mix(SIDE, INK, 0.09) if THEME == 'dark' else mix(SIDE, PURPLE, 0.12))
             rounded_rect(self, 0, h * 0.28, 3.5, h * 0.72, 2, PURPLE)
         elif self._hover:
             rounded_rect(self, 0.5, 0.5, w - 0.5, h - 0.5, 10, mix(SIDE, INK, 0.05))
         color = WHITE if self.active else (WHITE if self._hover else DIM)
-        draw_icon(self, self._icon, 16, (h - 18) / 2, 18, mix(PURPLE, TINT, 0.35 if THEME == 'dark' else 0.1) if self.active else color)
+        draw_icon(self, self._icon, 16, (h - 18) / 2, 18, (WHITE if THEME == 'dark' else PURPLE) if self.active else color)
         self.create_text(46, h / 2, text=self._text, anchor='w', fill=color,
                          font=(FONT_SEMI if self.active else FONT, 10, 'normal'))
 

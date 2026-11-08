@@ -16,8 +16,8 @@ COLUMNS = [('', 40, 0, 'sel'), ('AKUN', 190, 1, 'name'), ('STATUS', 100, 0, 'sta
            ('STREAMS', 100, 0, 'streams'), ('PENDENGAR', 100, 0, 'listeners'), ('HP', 46, 0, 'hp'),
            ('ARTIS', 56, 0, 'artists'), ('LAGU', 52, 0, 'songs'), ('SALDO TERSEDIA', 160, 0, 'balance'),
            ('DIPERBARUI', 104, 0, 'updated'), ('', 385, 0, 'actions')]
-COMPACT_HIDE = {'updated'}
-COMPACT_WIDTH = 1360
+# Kolom yang disembunyikan berurutan bila tabel terlalu sempit, agar tombol aksi tetap utuh.
+HIDE_ORDER = ('updated', 'songs', 'artists', 'status', 'hp')
 ROW_H = 50
 HEAD_H = 36
 
@@ -94,9 +94,12 @@ class AccountTable(tk.Frame):
 
     # ------------------------------------------------------------ layout
     def _layout(self, width):
-        compact = width < COMPACT_WIDTH
-        self.compact = compact
-        cols = [c for c in COLUMNS if not (compact and c[3] in COMPACT_HIDE)]
+        cols = list(COLUMNS)
+        for key in HIDE_ORDER:
+            if sum(c[1] for c in cols) <= width:
+                break
+            cols = [c for c in cols if c[3] != key]
+        self.compact = len(cols) < len(COLUMNS)
         fixed = sum(c[1] for c in cols)
         extra = max(0, width - fixed)
         weights = sum(c[2] for c in cols) or 1
@@ -150,6 +153,8 @@ class AccountTable(tk.Frame):
         c.create_line(8, y0 + ROW_H - 0.5, width - 8, y0 + ROW_H - 0.5, fill=LINE, tags=tag)
 
         def text(key, value, color=WHITE, font=F_TEXT, dy=0, pad=12):
+            if key not in xs:
+                return
             x, w, _ = xs[key]
             c.create_text(x + pad, cy + dy, text=_fit(value, font, w - pad - 6), anchor='w', fill=color, font=font, tags=tag)
 
@@ -170,24 +175,24 @@ class AccountTable(tk.Frame):
         avail = w - (nx - x) - 8
         c.create_text(nx, cy - 8, text=_fit(r['name'], F_BOLD, avail), anchor='w', fill=WHITE, font=F_BOLD, tags=tag)
         c.create_text(nx, cy + 10, text=_fit(r.get('sub', ''), F_SMALL, avail), anchor='w', fill=MUTED, font=F_SMALL, tags=tag)
-        # status pill
-        x, w, _ = xs['status']
-        online = r.get('online')
-        color = GREEN if online else MUTED
-        label = 'Aktif' if online else 'Tertutup'
-        pw = text_width(F_SMALL, label) + 28
-        pid = rounded_rect(c, x + 10, cy - 10, x + 10 + pw, cy + 10, 10, mix(PANEL, color, 0.14))
-        c.addtag_withtag(tag, pid)
-        c.create_oval(x + 19, cy - 3, x + 25, cy + 3, fill=color, outline='', tags=tag)
-        c.create_text(x + 30, cy, text=label, anchor='w', fill=mix(color, TINT, 0.3 if THEME == 'dark' else 0.25), font=F_SMALL, tags=tag)
+        # status pill (dilewati bila kolom status disembunyikan pada tabel sempit)
+        if 'status' in xs:
+            x, w, _ = xs['status']
+            online = r.get('online')
+            color = GREEN if online else MUTED
+            label = 'Aktif' if online else 'Tertutup'
+            pw = text_width(F_SMALL, label) + 28
+            pid = rounded_rect(c, x + 10, cy - 10, x + 10 + pw, cy + 10, 10, mix(PANEL, color, 0.14))
+            c.addtag_withtag(tag, pid)
+            c.create_oval(x + 19, cy - 3, x + 25, cy + 3, fill=color, outline='', tags=tag)
+            c.create_text(x + 30, cy, text=label, anchor='w', fill=mix(color, TINT, 0.3 if THEME == 'dark' else 0.25), font=F_SMALL, tags=tag)
         # angka
         has = r.get('has_period')
         text('streams', r['streams'], GREEN if has else MUTED, F_BOLD if has else F_TEXT)
         text('listeners', r['listeners'], WHITE if has else MUTED)
         text('hp', r['hp']); text('artists', r['artists']); text('songs', r['songs'])
         text('balance', r['balance'], WHITE if r.get('balance_known') else MUTED)
-        if 'updated' in xs:
-            text('updated', r.get('updated', '—'), DIM, (FONT, 9))
+        text('updated', r.get('updated', '—'), DIM, (FONT, 9))
         # tombol aksi (rata kanan)
         x, w, _ = xs['actions']
         buttons = [('open', 'Buka', None, 'primary'), ('upload', 'Unggah', 'music', 'secondary'),

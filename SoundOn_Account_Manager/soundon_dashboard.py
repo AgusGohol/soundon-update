@@ -47,7 +47,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.19.1'
+APP_VERSION='3.20.0'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -1416,8 +1416,7 @@ def refresh():
     total_stream=sum(r.get('streams',0) for a,r in data if r)
     total_listeners=sum(r.get('listeners',0) for a,r in data if r)
     total_balance=grouped_balance([a for a,r in data])
-    update_country_panels(start,end,plat)
-    update_inventory_dashboard()
+    update_overview(start,end,plat)
     connected=sum(bool(_chrome_status.get(str(a['id']),False)) for a in accounts)
     sidebar_total.set(str(len(accounts)))
     sidebar_connected.set(str(connected))
@@ -1425,7 +1424,6 @@ def refresh():
     status_var.set(f'{len(data)} akun ditampilkan  ·  {sum(bool(r) for a,r in data)} akun memiliki data periode ini  ·  Streams bertanda ≈ adalah perkiraan')
     now=datetime.now()
     greeting_var.set(f'{UI.greeting(now)}  ·  {HARI[now.weekday()]}, {now.day} {BULAN[now.month-1]} {now.year}')
-    update_insights(len(data),sum(bool(r) for a,r in data),connected)
     if sel_bar.winfo_manager() and not account_table.selected:sel_bar.pack_forget()
     if not account_table.winfo_manager():account_table.pack(fill='both',expand=True,padx=8,pady=8)
     table_rows=[]
@@ -2143,7 +2141,7 @@ def render_active_page():
             try: save_phone_inventory()
             except OSError as ex:
                 phone_inventory.clear();phone_inventory.update(previous);messagebox.showerror('Gagal menyimpan',str(ex),parent=root);return
-            update_inventory_dashboard();render_active_page();messagebox.showinfo('Inventaris tersimpan','Data inventaris HP berhasil disimpan.',parent=root)
+            render_active_page();messagebox.showinfo('Inventaris tersimpan','Data inventaris HP berhasil disimpan.',parent=root)
         button(intro,'✓  Simpan Inventaris',save_inventory_form,True).pack(anchor='w',pady=(4,8))
         label(intro,'Disimpan di '+INVENTORY_FILE,8,MUTED,wraplength=950,justify='left').pack(anchor='w',pady=(6,0))
     elif active_page=='Pengaturan':
@@ -2343,95 +2341,84 @@ main=tk.Frame(root,bg=BG);main.pack(side='left',fill='both',expand=True,padx=24,
 # Halaman Dashboard (tata letak seperti 3.12.1). Saat pindah halaman, frame ini
 # disembunyikan sepenuhnya, bukan ditimpa, agar tidak ada sisa gambar/bayangan.
 dash=tk.Frame(main,bg=BG);dash.pack(fill='both',expand=True)
-head=tk.Frame(dash,bg=BG);head.pack(fill='x',pady=(0,16))
-left_head=tk.Frame(head,bg=BG);left_head.pack(side='left')
+import dashboard_charts as DC
+# ---- Kepala: sapaan, total Streams (besar) + chip, tombol aksi; kanan: periode, platform, refresh.
+head=tk.Frame(dash,bg=BG);head.pack(fill='x',pady=(0,14))
+left_head=tk.Frame(head,bg=BG);left_head.pack(side='left',anchor='n')
 greeting_var=tk.StringVar(value=UI.greeting())
-tk.Label(left_head,textvariable=greeting_var,font=(FONT,10),fg=PURPLE,bg=BG).pack(anchor='w')
-label(left_head,'Dashboard',22,bold=True).pack(anchor='w')
-last_update=tk.StringVar(value='')
-_sub=tk.Frame(left_head,bg=BG);_sub.pack(anchor='w',pady=(2,0))
-tk.Label(_sub,textvariable=last_update,font=(FONT,9),fg=MUTED,bg=BG).pack(side='left')
-sync_status=tk.StringVar(value=sync_settings()['last_summary'])
-tk.Label(_sub,textvariable=sync_status,font=(FONT,9),fg=PURPLE,bg=BG).pack(side='left',padx=(14,0))
-# Label ringkas di bawah judul (diisi ulang setiap refresh).
-insight_row=tk.Frame(left_head,bg=BG);insight_row.pack(anchor='w',pady=(8,0))
-def update_insights(shown,with_data,connected):
-    for w in insight_row.winfo_children():w.destroy()
-    chips=[(f'{len(accounts)} akun',PURPLE),(f'{connected} Chrome aktif',GREEN if connected else MUTED)]
-    missing=shown-with_data
-    chips.append((f'{missing} akun belum ada data periode ini',AMBER) if missing else ('Semua akun punya data periode ini',GREEN))
-    if _sync_state['running']:chips.append(('Sinkron berjalan…',BLUE))
-    for text,color in chips:
-        UI.pill(insight_row,text,color,BG).pack(side='left',padx=(0,6))
+tk.Label(left_head,textvariable=greeting_var,font=(FONT,10),fg=DIM,bg=BG).pack(anchor='w')
+hero_title=tk.StringVar(value='Total Streams')
+tk.Label(left_head,textvariable=hero_title,font=(FONT,10),fg=MUTED,bg=BG).pack(anchor='w',pady=(10,0))
+hero_row=tk.Frame(left_head,bg=BG);hero_row.pack(anchor='w')
+hero_value=tk.StringVar(value='—')
+tk.Label(hero_row,textvariable=hero_value,font=(FONT,30,'bold'),fg=WHITE,bg=BG).pack(side='left')
+hero_chip=tk.Frame(hero_row,bg=BG);hero_chip.pack(side='left',padx=(12,0),pady=(10,0))
+hero_sub=tk.StringVar(value='')
+tk.Label(left_head,textvariable=hero_sub,font=(FONT,9),fg=MUTED,bg=BG).pack(anchor='w',pady=(0,10))
+hero_actions=tk.Frame(left_head,bg=BG);hero_actions.pack(anchor='w')
+menu_button(hero_actions,'Sinkron',[('Sinkron semua akun (periode terpilih)',lambda:start_sync()),('Sinkron per bulan…',ask_month_and_sync),
+                            ('Ulangi akun yang belum berhasil',retry_failed_sync),('Hentikan sinkron',stop_sync),None,
+                            ('Lihat laporan sinkron',open_sync_log),('Pengaturan sinkron…',lambda:switch_page('Pengaturan'))],
+            icon='sync',variant='primary').pack(side='left',padx=(0,8))
+button(hero_actions,'Unggah lagu',lambda:launch_upload_manager(),icon='music').pack(side='left',padx=(0,8))
+button(hero_actions,'Laporan',open_sync_log,icon='info').pack(side='left')
+right_head=tk.Frame(head,bg=BG);right_head.pack(side='right',anchor='n')
 # Satu periode untuk Dashboard dan Analytics.
 today=date.today();first=today.replace(day=1)
 start_var=tk.StringVar(value=str(first));end_var=tk.StringVar(value=str(today));platform_var=tk.StringVar(value='Semua Platform')
-button(head,'⟳  Refresh',lambda:(poll_chrome_status(),refresh())).pack(side='right',padx=(8,0))
-menu_button(head,'Sinkron',[('Sinkron semua akun (periode terpilih)',lambda:start_sync()),('Sinkron per bulan…',ask_month_and_sync),
-                            ('Ulangi akun yang belum berhasil',retry_failed_sync),('Hentikan sinkron',stop_sync),None,
-                            ('Lihat laporan sinkron',open_sync_log),('Pengaturan sinkron…',lambda:switch_page('Pengaturan'))],
-            icon='sync',variant='subtle').pack(side='right',padx=(8,0))
+button(right_head,'⟳  Refresh',lambda:(poll_chrome_status(),refresh())).pack(side='right',padx=(8,0))
 # Hanya platform yang bisa dibaca sinkron (auto_sync.SUPPORTED_PLATFORMS).
-ttk.Combobox(head,textvariable=platform_var,values=list(auto_sync.SUPPORTED_PLATFORMS),state='readonly',style='Dark.TCombobox',width=16).pack(side='right',padx=(8,0))
+ttk.Combobox(right_head,textvariable=platform_var,values=list(auto_sync.SUPPORTED_PLATFORMS),state='readonly',style='Dark.TCombobox',width=16).pack(side='right',padx=(8,0))
 platform_var.trace_add('write',lambda *_:refresh())
-period_button=PeriodButton(head,start_var,end_var,refresh);period_button.pack(side='right')
-# Dua ringkasan negara di bagian atas dashboard: Indonesia dan Amerika Serikat.
+period_button=PeriodButton(right_head,start_var,end_var,refresh);period_button.pack(side='right')
 US_NAMES=('amerika serikat','united states','usa','us')
 def in_country(a,country):
     cat=account_category(a).casefold()
     return cat in US_NAMES if country=='Amerika Serikat' else cat==country.casefold()
-summary=tk.Frame(dash,bg=BG);summary.pack(fill='x',pady=(0,14))
-country_panel_vars=[]
-for idx,country in enumerate(('Indonesia','Amerika Serikat')):
-    box=panel(summary)
-    box.grid(row=0,column=idx,sticky='nsew',padx=(0,7) if idx==0 else (7,0))
-    summary.grid_columnconfigure(idx,weight=1,uniform='country_summary')
-    header=tk.Frame(box,bg=PANEL);header.pack(fill='x',padx=18,pady=(14,10))
-    icon_badge(header,'flag' if idx==0 else 'globe',RED if idx==0 else BLUE,PANEL,34).pack(side='left',padx=(0,10))
-    tk.Label(header,text=country,font=(FONT,13,'bold'),fg=WHITE,bg=PANEL).pack(side='left')
-    body=tk.Frame(box,bg=PANEL);body.pack(fill='x',padx=14,pady=(0,14))
-    fields={}
-    specs=[('Streams',PURPLE,'wave'),('Pendengar',GREEN,'headphones'),('Saldo Tersedia',BLUE,'wallet'),('Jumlah Akun',AMBER,'users')]
-    for n,(title,accent,glyph) in enumerate(specs):
-        cell=tk.Frame(body,bg=CARD);cell.grid(row=n//2,column=n%2,sticky='nsew',padx=4,pady=4)
-        body.grid_columnconfigure(n%2,weight=1,uniform='metric')
-        inner=tk.Frame(cell,bg=CARD);inner.pack(fill='both',expand=True,padx=14,pady=12)
-        icon_badge(inner,glyph,accent,CARD,36).pack(side='left',padx=(0,12))
-        text=tk.Frame(inner,bg=CARD);text.pack(side='left',fill='both',expand=True)
-        label(text,title,9,DIM).pack(anchor='w')
-        val=tk.StringVar(value='—')
-        tk.Label(text,textvariable=val,font=(FONT,15,'bold'),fg=WHITE,bg=CARD,anchor='w').pack(anchor='w',pady=(1,0))
-        sub=tk.StringVar(value='')
-        tk.Label(text,textvariable=sub,font=(FONT,8),fg=MUTED,bg=CARD,anchor='w').pack(anchor='w')
-        fields[title]=val;fields[title+':sub']=sub
-        if title in ('Streams','Pendengar'):
-            spark=UI.Sparkline(inner,accent,CARD,96,38);spark.pack(side='right',padx=(6,0))
-            fields[title+':spark']=spark
-        UI.hover_highlight(cell,CARD,CARD_HI)
-    country_panel_vars.append((country,fields))
-
-# Ringkasan Inventaris HP pada Dashboard utama (satu baris ringkas; detail di halaman Inventaris HP).
-inventory_dash=panel(dash);inventory_dash.pack(fill='x',pady=(0,14))
-inv_row=tk.Frame(inventory_dash,bg=PANEL);inv_row.pack(fill='x',padx=14,pady=10)
-inv_title=tk.Frame(inv_row,bg=PANEL);inv_title.pack(side='left',padx=(4,12))
-icon_badge(inv_title,'phone',PURPLE,PANEL,30).pack(side='left',padx=(0,8))
-label(inv_title,'Inventaris HP',12,bold=True).pack(side='left')
-button(inv_row,'Buka',lambda:switch_page('Inventaris HP'),icon='external',height=30,font_size=9).pack(side='right',padx=(10,0))
-inv_metrics=tk.Frame(inv_row,bg=PANEL);inv_metrics.pack(side='left',fill='x',expand=True)
-inventory_dashboard_vars={}
-for i,(title,color,glyph) in enumerate([('DIPAKAI AKUN',PURPLE,'phone'),('TERSEDIA',GREEN,'check'),('SERVICE',BLUE,'wrench'),('RUSAK',RED,'alert'),('TIDAK TERPAKAI',MUTED,'circle'),('TOTAL HP',AMBER,'grid')]):
-    cell=tk.Frame(inv_metrics,bg=CARD);cell.grid(row=0,column=i,sticky='nsew',padx=3);inv_metrics.grid_columnconfigure(i,weight=1,uniform='inv')
-    inner=tk.Frame(cell,bg=CARD);inner.pack(fill='both',expand=True,padx=10,pady=6)
-    icon_badge(inner,glyph,color,CARD,24).pack(side='left',padx=(0,8))
-    v=tk.StringVar(value='0');inventory_dashboard_vars[title]=v
-    tk.Label(inner,textvariable=v,font=(FONT,12,'bold'),fg=WHITE,bg=CARD).pack(side='left')
-    short={'DIPAKAI AKUN':'Dipakai','TIDAK TERPAKAI':'Tak terpakai','TOTAL HP':'Total'}.get(title,title.capitalize())
-    tk.Label(inner,text=short,font=(FONT,8),fg=DIM,bg=CARD).pack(side='left',padx=(6,0))
-    UI.hover_highlight(cell,CARD,CARD_HI)
-def update_inventory_dashboard():
-    assigned=assigned_phone_count();others=sum(phone_inventory[k] for k in ('tersedia','service','rusak','tidak_terpakai'))
-    vals={'DIPAKAI AKUN':assigned,'TERSEDIA':phone_inventory['tersedia'],'SERVICE':phone_inventory['service'],'RUSAK':phone_inventory['rusak'],'TIDAK TERPAKAI':phone_inventory['tidak_terpakai'],'TOTAL HP':assigned+others}
-    for k,v in vals.items(): inventory_dashboard_vars[k].set(number(v))
+# ---- Kartu: Indonesia, Amerika Serikat, Pendengar, Saldo, + Tambah akun.
+cards=tk.Frame(dash,bg=BG);cards.pack(fill='x',pady=(0,14))
+stat_cards={
+    'Indonesia':DC.StatCard(cards,'Indonesia','flag'),
+    'Amerika Serikat':DC.StatCard(cards,'Amerika Serikat','globe'),
+    'Pendengar':DC.StatCard(cards,'Pendengar','headphones'),
+    'Saldo':DC.StatCard(cards,'Saldo tersedia','wallet'),
+}
+for i,card in enumerate(list(stat_cards.values())+[DC.AddCard(cards,'Tambah akun SoundOn baru ke dashboard',lambda:add_account())]):
+    card.grid(row=0,column=i,sticky='nsew',padx=(0 if i==0 else 6,0))
+    cards.grid_columnconfigure(i,weight=1 if i<4 else 0,uniform='cards' if i<4 else '')
+# ---- Tab: Ringkasan (grafik) | Daftar Akun (tabel).
+tabs_row=tk.Frame(dash,bg=BG);tabs_row.pack(fill='x',pady=(0,12))
+last_update=tk.StringVar(value='')
+sync_status=tk.StringVar(value=sync_settings()['last_summary'])
+tk.Label(tabs_row,textvariable=sync_status,font=(FONT,9),fg=DIM,bg=BG).pack(side='right')
+tk.Label(tabs_row,textvariable=last_update,font=(FONT,9),fg=MUTED,bg=BG).pack(side='right',padx=(0,14))
+views=tk.Frame(dash,bg=BG);views.pack(fill='both',expand=True)
+overview_view=tk.Frame(views,bg=BG)
+table_view=tk.Frame(views,bg=BG)
+def show_dashboard_tab(name):
+    for v in (overview_view,table_view):v.pack_forget()
+    # Tab Daftar Akun: kartu disembunyikan agar tabel lega (total tetap terlihat di atas).
+    if name=='Daftar Akun':cards.pack_forget()
+    elif not cards.winfo_manager():cards.pack(fill='x',pady=(0,14),before=tabs_row)
+    (overview_view if name=='Ringkasan' else table_view).pack(fill='both',expand=True)
+    try:UI.save_settings(dashboard_tab=name)
+    except OSError:pass
+_tab=UI.load_settings().get('dashboard_tab','Ringkasan')
+_tab=_tab if _tab in ('Ringkasan','Daftar Akun') else 'Ringkasan'
+dashboard_tabs=DC.Segmented(tabs_row,['Ringkasan','Daftar Akun'],_tab,show_dashboard_tab);dashboard_tabs.pack(side='left')
+for c in range(3):overview_view.grid_columnconfigure(c,weight=1,uniform='ov')
+overview_view.grid_rowconfigure(0,weight=3);overview_view.grid_rowconfigure(1,weight=2)
+line_chart=DC.LineChart(overview_view,'Streams per bulan',height=200)
+line_chart.grid(row=0,column=0,columnspan=2,sticky='nsew',padx=(0,6),pady=(0,12))
+bar_chart=DC.BarChart(overview_view,'Akun teratas · periode ini',height=200)
+bar_chart.grid(row=0,column=2,sticky='nsew',padx=(6,0),pady=(0,12))
+activity=DC.Activity(overview_view,'Aktivitas sinkron terakhir',on_link=open_sync_log,height=170)
+activity.grid(row=1,column=0,sticky='nsew',padx=(0,6))
+balance_list=DC.BarList(overview_view,'Saldo tersedia',height=170)
+balance_list.grid(row=1,column=1,sticky='nsew',padx=6)
+status_grid=DC.StatusGrid(overview_view,'Status sinkron akun',height=170)
+status_grid.grid(row=1,column=2,sticky='nsew',padx=(6,0))
+show_dashboard_tab(_tab)
 
 def monthly_series(members,key,platform,months=6):
     """Total per bulan (6 bulan terakhir, terlama dulu) dari catatan bulanan sinkron; None bila kosong."""
@@ -2451,24 +2438,81 @@ def monthly_series(members,key,platform,months=6):
         out.append(total)
     return out
 
-def update_country_panels(start,end,platform):
-    # Ringkasan selalu memuat semua akun negara tersebut, tidak terpengaruh pencarian/filter tabel.
-    for country,fields in country_panel_vars:
-        members=[a for a in accounts if in_country(a,country)]
-        recs=[latest(a,start,end,platform) for a in members]
-        fields['Streams'].set(number(sum((r or {}).get('streams',0) for r in recs)))
-        fields['Pendengar'].set(number(sum((r or {}).get('listeners',0) for r in recs)))
-        fields['Saldo Tersedia'].set(grouped_balance(members))
-        fields['Jumlah Akun'].set(str(len(members)))
-        for key,title in (('streams','Streams'),('listeners','Pendengar')):
-            series=monthly_series(members,key,platform)
-            fields[title+':spark'].set(series)
-            fields[title+':sub'].set('Tren 6 bulan' if sum(v is not None for v in series)>=2 else 'Tren muncul setelah 2 bulan sinkron')
-        synced=[a.get('balance_updated') for a in members if a.get('balance_updated')]
-        fields['Saldo Tersedia:sub'].set('Sinkron '+short_time(max(synced)) if synced else 'Belum disinkronkan')
-        online=sum(bool(_chrome_status.get(str(a['id']),False)) for a in members)
-        fields['Jumlah Akun:sub'].set(f'{online} Chrome aktif')
-bar=tk.Frame(dash,bg=BG);bar.pack(fill='x',pady=(0,10))
+BULAN_PENDEK=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
+def _last_months(n=6):
+    y,m=date.today().year,date.today().month;out=[]
+    for _ in range(n):
+        out.append(BULAN_PENDEK[m-1]);m-=1
+        if m==0:y,m=y-1,12
+    return out[::-1]
+
+def _change(series):
+    """(teks chip, warna) bulan lalu dibanding bulan sebelumnya, atau ('', None)."""
+    if len(series)>=3 and series[-2] and series[-3]:
+        pct=(series[-2]-series[-3])/series[-3]*100
+        return ('%+.0f%%'%pct,GREEN if pct>=0 else RED)
+    return ('',None)
+
+def last_sync_run():
+    """Hasil per akun dari sinkron terakhir di sync_log.txt: [(waktu, STATUS, id, nama, catatan)]."""
+    try:
+        with open(SYNC_LOG,encoding='utf-8') as f:lines=f.read().splitlines()
+    except OSError:
+        return []
+    start=max((i for i,line in enumerate(lines) if 'Mulai sinkron ' in line),default=None)
+    if start is None:return []
+    out=[]
+    for line in lines[start+1:]:
+        m=re.match(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}):\d{2}\s+\[(OK|LOGIN|LEWATI|GAGAL)\] (.*) \(#([^)]+)\): (.*)$',line)
+        if m:out.append((m.group(1),m.group(2),m.group(4),m.group(3),m.group(5)))
+    return out
+
+def update_overview(start,end,platform):
+    """Kepala, kartu, dan tab Ringkasan. Semua akun dihitung (tidak terpengaruh filter tabel)."""
+    recs={str(a['id']):latest(a,start,end,platform) for a in accounts}
+    def total(members,key):return sum((recs[str(a['id'])] or {}).get(key,0) for a in members)
+    ind=[a for a in accounts if in_country(a,'Indonesia')];usa=[a for a in accounts if in_country(a,'Amerika Serikat')]
+    all_streams=total(accounts,'streams')
+    hero_title.set(f'Total Streams  ·  {start} s.d. {end}')
+    hero_value.set(number(all_streams))
+    for w in hero_chip.winfo_children():w.destroy()
+    series_all=monthly_series(accounts,'streams',platform)
+    text,col=_change(series_all)
+    if text:UI.pill(hero_chip,text+' '+_last_months()[-2],col,BG).pack(side='left')
+    hero_sub.set(f'Indonesia: {number(total(ind,"streams"))}   ·   Amerika Serikat: {number(total(usa,"streams"))}   ·   {len(accounts)} akun')
+    months=_last_months()
+    for country,members in (('Indonesia',ind),('Amerika Serikat',usa)):
+        series=monthly_series(members,'streams',platform);text,col=_change(series)
+        stat_cards[country].set(number(total(members,'streams')),(f'{len(members)} akun' if not text else f'{months[-2]} vs {months[-3]}'),
+                                text,col or GREEN,series)
+    listeners=monthly_series(accounts,'listeners',platform)
+    stat_cards['Pendengar'].set(number(total(accounts,'listeners')),f'Indonesia {number(total(ind,"listeners"))} · AS {number(total(usa,"listeners"))}',
+                                '',GREEN,listeners)
+    idr=[a for a in accounts if a.get('currency','IDR')=='IDR' and a.get('balance_updated')]
+    usd=[a for a in accounts if a.get('currency')=='USD' and a.get('balance_updated')]
+    idr_total=sum(float(a.get('balance',0)) for a in idr);usd_total=sum(float(a.get('balance',0)) for a in usd)
+    synced=[a.get('balance_updated') for a in accounts if a.get('balance_updated')]
+    stat_cards['Saldo'].set(money(idr_total,'IDR'),(money(usd_total,'USD')+'  ·  ' if usd else '')+('Sinkron '+short_time(max(synced)) if synced else 'Belum disinkronkan'))
+    # Ringkasan
+    line_chart.set(number(series_all[-1] or 0)+' bulan ini',months,
+                   [('Indonesia',DC.ACCENT,monthly_series(ind,'streams',platform)),('Amerika Serikat',DC.SECOND,monthly_series(usa,'streams',platform))])
+    top=sorted(((a,(recs[str(a['id'])] or {}).get('streams',0)) for a in accounts if recs[str(a['id'])]),key=lambda x:x[1],reverse=True)[:7]
+    bar_chart.set(number(top[0][1]) if top else '—',[(a['name'].split()[0][:8],a['name'],v) for a,v in top])
+    ranked=sorted(idr,key=lambda a:float(a.get('balance',0)),reverse=True)[:5]
+    hi=max([float(a.get('balance',0)) for a in ranked] or [1]) or 1
+    balance_list.set(money(idr_total,'IDR'),[(a['name'],money(float(a.get('balance',0)),'IDR'),float(a.get('balance',0))/hi,DC.ACCENT if i==0 else UI.mix(PANEL,UI.INK,0.35))
+                                             for i,a in enumerate(ranked)],sub=(money(usd_total,'USD')+' dari akun USD') if usd else '')
+    run=last_sync_run()
+    rows=[]
+    for when,status,aid,name,note in reversed(run[-5:]):
+        short=note.split(' · ')[0] if status=='OK' else note
+        rows.append((status,name,short[:40],short_time(when+':00')))
+    activity.set(rows)
+    by_id={aid:status for _,status,aid,_,_ in run}
+    ok=sum(1 for s in by_id.values() if s=='OK')
+    status_grid.set(f'{ok}/{len(accounts)} berhasil' if by_id else 'Belum ada sinkron',
+                    [(a['name'],by_id.get(str(a['id']))) for a in sorted(accounts,key=lambda a:int(a['id']))])
+bar=tk.Frame(table_view,bg=BG);bar.pack(fill='x',pady=(0,10))
 label(bar,'Daftar Akun',14,bold=True).pack(side='left',padx=(0,6))
 category_var=tk.StringVar(value='Semua Kategori')
 category_filter=ttk.Combobox(bar,textvariable=category_var,values=['Semua Kategori']+categories,state='readonly',style='Dark.TCombobox',width=17)
@@ -2486,10 +2530,10 @@ search_var.trace_add('write',delayed_search)
 ttk.Combobox(bar,textvariable=sort_var,values=['Streams terbanyak','Streams tersedikit','Saldo terbesar','Nama A–Z'],state='readonly',style='Dark.TCombobox',width=17).pack(side='right',padx=6)
 sort_var.trace_add('write',lambda *_:refresh())
 label(bar,'Urutkan',9,DIM).pack(side='right')
-status_var=tk.StringVar();tk.Label(dash,textvariable=status_var,font=(FONT,9),fg=MUTED,bg=BG,anchor='w').pack(side='bottom',fill='x',pady=(4,0))
-total_line=tk.Frame(dash,bg=BG);total_line.pack(side='bottom',fill='x',pady=(10,0))
+status_var=tk.StringVar();tk.Label(table_view,textvariable=status_var,font=(FONT,9),fg=MUTED,bg=BG,anchor='w').pack(side='bottom',fill='x',pady=(4,0))
+total_line=tk.Frame(table_view,bg=BG);total_line.pack(side='bottom',fill='x',pady=(10,0))
 totals_var=tk.StringVar();tk.Label(total_line,textvariable=totals_var,font=(FONT,10,'bold'),fg=GREEN,bg=BG,anchor='w').pack(side='left')
-wrap=panel(dash);wrap.pack(fill='both',expand=True)
+wrap=panel(table_view);wrap.pack(fill='both',expand=True)
 from account_table import AccountTable
 def _row_menu(r):
     a=r['account']
