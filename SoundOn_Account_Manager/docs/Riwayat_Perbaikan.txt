@@ -316,3 +316,11 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Penghasilan > Rekap pendapatan bulanan: pilih bulan untuk melihat pendapatan Rupiah dan Dolar AS, total yang ditarik, jumlah akun yang berpendapatan, grafik pendapatan 6 bulan, dan tabel pendapatan per akun.
 - Tombol Ekspor CSV menyimpan rekap bulan terpilih (bisa dibuka di Excel).
 - Tombol Sinkron di tabel rekap membaca ulang satu akun saja.
+
+
+3.21.1: Penghasilan dibagi IDR | USD, ringkasan tidak ikut tergulir, Daftar Akun lebih rapi.
+- Penghasilan: tabel Rupiah (IDR) di kiri dan Dolar AS (USD) di kanan, masing-masing berisi saldo dan pendapatan bulan terpilih per akun (serta yang ditarik), lengkap dengan grafik 6 bulan. Pada layar sempit kedua tabel ditumpuk atas-bawah.
+- Penghasilan, Analytics, dan Daftar Akun: filter dan kartu ringkasan berada di bagian atas yang tetap terlihat saat daftar digulir.
+- Daftar Akun: satu tabel rapi. "Per Pemilik" menampilkan pemilik beserta artis, akun SoundOn, dan saldo (tombol Sinkron, Buka, ⋯). "Per Akun" dikelompokkan per kategori dengan HP, artis, lagu, dan saldo (tombol Buka, Atur, Artis, ⋯). Ada pencarian pemilik/artis/akun.
+- Sidebar: bagian "STUDIO / Unggah Lagu" dihapus; Studio unggah dibuka dari tombol "Unggah lagu" di Dashboard.
+- Angka yang tidak muat di kolom kini diperkecil hurufnya terlebih dahulu, tidak langsung terpotong.

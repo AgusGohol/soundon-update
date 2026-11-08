@@ -678,10 +678,15 @@ def search_entry(parent, var, placeholder='Cari…', width=24):
     hint = tk.Label(box, text=placeholder, bg=CARD, fg=MUTED, font=(FONT, 10))
 
     def sync(*_):
-        if var.get() or box.focus_get() is e:
-            hint.place_forget()
-        else:
-            hint.place(in_=e, x=1, rely=0.5, anchor='w')
+        try:
+            if not hint.winfo_exists():
+                return                       # halaman sudah dibangun ulang
+            if var.get() or box.focus_get() is e:
+                hint.place_forget()
+            else:
+                hint.place(in_=e, x=1, rely=0.5, anchor='w')
+        except tk.TclError:
+            pass
     e.bind('<FocusIn>', sync); e.bind('<FocusOut>', sync); var.trace_add('write', sync)
     hint.bind('<Button-1>', lambda ev: e.focus_set())
     box.after(50, sync)

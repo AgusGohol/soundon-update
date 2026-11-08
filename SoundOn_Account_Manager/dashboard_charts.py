@@ -667,6 +667,148 @@ class BalanceTable(tk.Canvas):
                 return
 
 
+class GroupTable(tk.Canvas):
+    """Tabel umum berkelompok (dipakai Penghasilan & Daftar Akun).
+
+    columns = [(key, judul, bobot, 'w'/'e')]; kolom aksi di kanan selebar actions_width.
+    rows: {'kind': 'group', 'title', 'sub', 'right', 'actions': [(label, fungsi, utama?)]}
+          {'kind': 'item', 'name', 'accent', 'cells': {key: teks | (teks, warna, tebal)},
+           'subs': {key: teks kecil}, 'bars': {key: 0..1}, 'actions': [...]}
+    Kolom pertama menampilkan avatar inisial `name`."""
+    HEAD, ROW, GROUP = 36, 52, 50
+
+    def __init__(self, parent, columns, actions_width=170, empty_text='Tidak ada data.'):
+        self._bg = parent.cget('bg')
+        super().__init__(parent, height=self.HEAD + self.ROW, bg=self._bg, highlightthickness=0, bd=0)
+        self.columns, self.actions_width, self.empty_text = list(columns), actions_width, empty_text
+        self.rows, self._hits, self._ys, self._hover = [], [], [], None
+        self.bind('<Configure>', lambda e: self.redraw())
+        self.bind('<Motion>', self._motion)
+        self.bind('<Leave>', lambda e: self._set_hover(None))
+        self.bind('<ButtonRelease-1>', self._click)
+
+    def set(self, rows):
+        self.rows = list(rows)
+        h = self.HEAD + sum(self.GROUP if r['kind'] == 'group' else self.ROW for r in self.rows) + 8
+        self.configure(height=max(h, self.HEAD + self.ROW))
+        self.redraw()
+
+    def _cols(self, w):
+        rest = max(200, w - self.actions_width)
+        total = sum(c[2] for c in self.columns) or 1
+        x, cols = 0, {}
+        for key, title, weight, align in self.columns:
+            cw = rest * weight / total
+            cols[key] = (x, cw, title, align)
+            x += cw
+        return cols, x
+
+    def redraw(self):
+        self.delete('all')
+        w = self.winfo_width()
+        if w < 50:
+            return
+        cols, ax = self._cols(w)
+        rounded_rect(self, 0, 0, w, self.HEAD, 10, mix(self._bg, INK, 0.06))
+        for key, (x, cw, title, align) in cols.items():
+            if title:
+                tx = x + cw - 12 if align == 'e' else x + 14
+                self.create_text(tx, self.HEAD / 2, text=title, fill=MUTED, font=_font(8, True), anchor=align)
+        self._hits, self._ys = [], []
+        if not self.rows:
+            self.create_text(w / 2, self.HEAD + 26, text=self.empty_text, fill=MUTED, font=_font(10))
+            return
+        y = self.HEAD
+        for i, r in enumerate(self.rows):
+            if r['kind'] == 'group':
+                self._group(r, y, w)
+                self._ys.append((y, y + self.GROUP, None))
+                y += self.GROUP
+            else:
+                self._item(i, r, y, cols, ax, w)
+                self._ys.append((y, y + self.ROW, i))
+                y += self.ROW
+
+    def _actions(self, actions, right, cy):
+        for label, fn, primary in reversed(actions or []):
+            bw = text_width(_font(9, True), label) + 22
+            rounded_rect(self, right - bw, cy - 13, right, cy + 13, 13, ACCENT if primary else mix(self._bg, INK, 0.1))
+            self.create_text(right - bw / 2, cy, text=label, fill='#ffffff' if primary else WHITE, font=_font(9, True))
+            self._hits.append((right - bw, cy - 13, right, cy + 13, fn))
+            right -= bw + 6
+        return right
+
+    def _group(self, r, y0, w):
+        cy = y0 + self.GROUP / 2 + 4
+        self.create_line(0, y0 + 6, w, y0 + 6, fill=mix(self._bg, INK, 0.05))
+        self.create_text(14, cy - 7, text=r.get('title', ''), fill=WHITE, font=_font(11, True), anchor='w')
+        if r.get('sub'):
+            self.create_text(14, cy + 10, text=r['sub'], fill=MUTED, font=_font(8), anchor='w')
+        right = self._actions(r.get('actions'), w - 10, cy)
+        if r.get('right'):
+            self.create_text(right - 10, cy, text=r['right'], fill=GREEN, font=_font(10, True), anchor='e')
+
+    def _item(self, i, r, y0, cols, ax, w):
+        cy = y0 + self.ROW / 2
+        bg = mix(self._bg, INK, 0.05) if i == self._hover else self._bg
+        self.create_rectangle(0, y0, w, y0 + self.ROW, fill=bg, outline='', tags=('rowbg%d' % i,))
+        self.create_line(8, y0, w - 8, y0, fill=mix(self._bg, INK, 0.07))
+        cells, subs, bars = r.get('cells', {}), r.get('subs', {}), r.get('bars', {})
+        for n, (key, (x, cw, title, align)) in enumerate(cols.items()):
+            val = cells.get(key, '')
+            text, color, bold = (val + (None, None))[:3] if isinstance(val, tuple) else (val, None, None)
+            color = color or (WHITE if n == 0 else DIM)
+            bold = (n == 0) if bold is None else bold
+            x0 = x + 14
+            if n == 0 and r.get('name'):
+                acc = r.get('accent', ACCENT)
+                self.create_oval(x0 - 4, cy - 14, x0 + 24, cy + 14, fill=mix(self._bg, acc, 0.22), outline='')
+                self.create_text(x0 + 10, cy, text=(r['name'][:1] or '?').upper(), fill=mix(acc, INK, 0.3), font=_font(10, True))
+                x0 += 36
+            avail = cw - (x0 - x) - 12
+            sub = subs.get(key)
+            tx = x + cw - 12 if align == 'e' else x0
+            dy = -8 if (sub or key in bars) else 0
+            size = 10
+            if align == 'e':                      # angka: kecilkan huruf dulu sebelum dipotong
+                while size > 8 and text_width(_font(size, bold), str(text)) > avail:
+                    size -= 1
+            self.create_text(tx, cy + dy, text=_fit(text, _font(size, bold), avail), fill=color, font=_font(size, bold), anchor=align)
+            if key in bars:
+                bx1 = x + cw - 12
+                bx0 = max(x0, bx1 - avail)
+                rounded_rect(self, bx0, cy + 9, bx1, cy + 13, 2, mix(self._bg, INK, 0.08))
+                if bars[key] > 0:
+                    rounded_rect(self, bx1 - max(4, (bx1 - bx0) * min(1, bars[key])), cy + 9, bx1, cy + 13, 2, mix(GREEN, self._bg, 0.25))
+            elif sub:
+                self.create_text(tx, cy + 10, text=_fit(sub, _font(8), avail), fill=MUTED, font=_font(8), anchor=align)
+        self._actions(r.get('actions'), w - 10, cy)
+
+    def _index(self, y):
+        for a, b, i in self._ys:
+            if a <= y < b:
+                return i
+        return None
+
+    def _set_hover(self, i):
+        if i != self._hover:
+            for j in (self._hover, i):
+                if j is not None:
+                    self.itemconfigure('rowbg%d' % j, fill=mix(self._bg, INK, 0.05) if j == i else self._bg)
+            self._hover = i
+
+    def _motion(self, e):
+        self._set_hover(self._index(e.y))
+        over = any(a <= e.x <= c and b <= e.y <= d for a, b, c, d, _ in self._hits)
+        self.configure(cursor='hand2' if over else '')
+
+    def _click(self, e):
+        for a, b, c, d, fn in self._hits:
+            if a <= e.x <= c and b <= e.y <= d:
+                fn()
+                return
+
+
 def _fit(text, font, width):
     text = str(text)
     if width <= 10 or text_width(font, text) <= width:
