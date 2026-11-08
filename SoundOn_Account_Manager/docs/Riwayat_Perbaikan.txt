@@ -290,3 +290,9 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Tab "Ringkasan": grafik Streams per bulan (Indonesia & Amerika Serikat, arahkan kursor untuk melihat angkanya), akun teratas periode ini, aktivitas sinkron terakhir, saldo tersedia per akun, dan kotak status sinkron setiap akun.
 - Tab "Daftar Akun": tabel akun seperti sebelumnya (Buka, Unggah, Baca, Data). Tab terakhir yang dipakai diingat.
 - Tabel akun pada layar sempit menyembunyikan kolom yang kurang penting satu per satu, sehingga tombol aksi tidak lagi terpotong.
+
+
+3.20.1: Analytics (Asal Streams) lebih mudah dibaca.
+- Ringkasan di atas: jumlah akun yang sudah dibaca, rata-rata persentase Indonesia dan Amerika Serikat, dan jumlah artis terbaca pada periode terpilih.
+- Satu tabel ringkas, satu baris per artis: akun, artis, batang Indonesia dan Amerika Serikat dengan persentasenya, Streams akun, waktu dibaca, serta tombol Buka dan Baca. Kartu besar per akun dihapus.
+- Filter: Sudah dibaca (bawaan) / Belum dibaca / Semua akun, kategori, urutan (Indonesia % tertinggi, Amerika Serikat % tertinggi, Nama A–Z), dan pencarian akun atau artis.

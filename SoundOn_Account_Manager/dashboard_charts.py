@@ -401,6 +401,132 @@ class StatusGrid(_Surface):
         self.delete('tip')
 
 
+class RegionTable(tk.Canvas):
+    """Tabel Asal Streams: satu baris per artis (atau per akun yang belum dibaca).
+
+    rows = [dict(account, name, sub, artist, id_pct, us_pct, streams, updated, accent, first)]
+    first=False: baris artis berikutnya dari akun yang sama (nama akun tidak diulang)."""
+    HEAD, ROW = 38, 54
+
+    def __init__(self, parent, on_open, on_read):
+        self._bg = parent.cget('bg')
+        super().__init__(parent, height=self.HEAD + self.ROW, bg=self._bg, highlightthickness=0, bd=0)
+        self.on_open, self.on_read = on_open, on_read
+        self.rows, self._hits, self._hover = [], [], None
+        self.bind('<Configure>', lambda e: self.redraw())
+        self.bind('<Motion>', self._motion)
+        self.bind('<Leave>', lambda e: self._set_hover(None))
+        self.bind('<ButtonRelease-1>', self._click)
+
+    def set(self, rows):
+        self.rows = list(rows)
+        self.configure(height=self.HEAD + max(1, len(self.rows)) * self.ROW + 8)
+        self.redraw()
+
+    def _cols(self, w):
+        act = 176
+        rest = max(400, w - act)
+        spec = [('akun', 'AKUN', 0.24), ('artis', 'ARTIS', 0.17), ('id', 'INDONESIA', 0.2), ('us', 'AMERIKA SERIKAT', 0.2),
+                ('streams', 'STREAMS AKUN', 0.1), ('dibaca', 'DIBACA', 0.09)]
+        x, cols = 0, {}
+        for key, title, part in spec:
+            cols[key] = (x, rest * part, title)
+            x += rest * part
+        cols['aksi'] = (x, act, '')
+        return cols
+
+    def redraw(self):
+        self.delete('all')
+        w = self.winfo_width()
+        if w < 50:
+            return
+        cols = self._cols(w)
+        rounded_rect(self, 0, 0, w, self.HEAD, 10, mix(self._bg, INK, 0.06))
+        for key, (x, cw, title) in cols.items():
+            if title:
+                self.create_text(x + 14, self.HEAD / 2, text=title, fill=MUTED, font=_font(8, True), anchor='w')
+        self._hits = []
+        if not self.rows:
+            self.create_text(w / 2, self.HEAD + 26, text='Tidak ada data yang cocok dengan filter.', fill=MUTED, font=_font(10))
+            return
+        for i, r in enumerate(self.rows):
+            self._row(i, r, cols, w)
+
+    def _row(self, i, r, cols, w):
+        y0 = self.HEAD + i * self.ROW
+        cy = y0 + self.ROW / 2
+        bg = mix(self._bg, INK, 0.05) if i == self._hover else self._bg
+        self.create_rectangle(0, y0, w, y0 + self.ROW, fill=bg, outline='', tags=('rowbg', 'rowbg%d' % i))
+        if r.get('first', True):
+            self.create_line(8, y0, w - 8, y0, fill=mix(self._bg, INK, 0.08))
+            x = cols['akun'][0] + 14
+            acc = r.get('accent', ACCENT)
+            self.create_oval(x, cy - 15, x + 30, cy + 15, fill=mix(self._bg, acc, 0.22), outline='')
+            self.create_text(x + 15, cy, text=(r['name'][:1] or '?').upper(), fill=mix(acc, INK, 0.3), font=_font(10, True))
+            avail = cols['akun'][1] - 60
+            self.create_text(x + 40, cy - 8, text=_fit(r['name'], _font(10, True), avail), fill=WHITE, font=_font(10, True), anchor='w')
+            self.create_text(x + 40, cy + 10, text=_fit(r.get('sub', ''), _font(8), avail), fill=MUTED, font=_font(8), anchor='w')
+            sx, sw, _ = cols['streams']
+            self.create_text(sx + 14, cy, text=r.get('streams', '—'), fill=DIM, font=_font(9), anchor='w')
+        ax, aw, _ = cols['artis']
+        if r.get('artist'):
+            self.create_text(ax + 14, cy, text=_fit(r['artist'], _font(10), aw - 20), fill=WHITE, font=_font(10), anchor='w')
+            for key, col in (('id', GREEN), ('us', ACCENT)):
+                x, cw, _ = cols[key]
+                v = r.get(key + '_pct')
+                bx0, bx1 = x + 14, x + cw - 70
+                rounded_rect(self, bx0, cy - 3, bx1, cy + 3, 3, mix(self._bg, INK, 0.09))
+                if v is not None and bx1 > bx0:
+                    rounded_rect(self, bx0, cy - 3, bx0 + max(6, (bx1 - bx0) * min(100, max(0, v)) / 100), cy + 3, 3, col)
+                txt = '—' if v is None else ('%.1f%%' % v).replace('.', ',')
+                self.create_text(x + cw - 14, cy, text=txt, fill=col if v is not None else MUTED, font=_font(10, True), anchor='e')
+            dx, dw, _ = cols['dibaca']
+            self.create_text(dx + 14, cy, text=r.get('updated', '—'), fill=MUTED, font=_font(8), anchor='w')
+        else:
+            self.create_text(ax + 14, cy, text='Belum dibaca untuk periode ini', fill=MUTED, font=_font(9), anchor='w')
+        if r.get('first', True):
+            x, aw, _ = cols['aksi']
+            right = x + aw - 10
+            for key, text, primary in (('read', 'Baca', True), ('open', 'Buka', False)):
+                bw = text_width(_font(9, True), text) + 26
+                fill = ACCENT if primary else mix(self._bg, INK, 0.1)
+                rounded_rect(self, right - bw, cy - 14, right, cy + 14, 14, fill)
+                self.create_text(right - bw / 2, cy, text=text, fill='#ffffff' if primary else WHITE, font=_font(9, True))
+                self._hits.append((right - bw, cy - 14, right, cy + 14, key, r['account']))
+                right -= bw + 8
+
+    def _index(self, y):
+        i = int((y - self.HEAD) // self.ROW)
+        return i if y >= self.HEAD and 0 <= i < len(self.rows) else None
+
+    def _set_hover(self, i):
+        if i != self._hover:
+            for j in (self._hover, i):
+                if j is not None:
+                    self.itemconfigure('rowbg%d' % j, fill=mix(self._bg, INK, 0.05) if j == i else self._bg)
+            self._hover = i
+
+    def _motion(self, e):
+        self._set_hover(self._index(e.y))
+        over = any(a <= e.x <= c and b <= e.y <= d for a, b, c, d, _, _ in self._hits)
+        self.configure(cursor='hand2' if over else '')
+
+    def _click(self, e):
+        for a, b, c, d, key, account in self._hits:
+            if a <= e.x <= c and b <= e.y <= d:
+                (self.on_read if key == 'read' else self.on_open)(account)
+                return
+
+
+def _fit(text, font, width):
+    text = str(text)
+    if width <= 10 or text_width(font, text) <= width:
+        return text
+    while text and text_width(font, text + '…') > width:
+        text = text[:-1]
+    return text + '…'
+
+
 class Segmented(tk.Canvas):
     """Tombol tab berbentuk kapsul (mis. Ringkasan | Daftar Akun)."""
 

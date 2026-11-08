@@ -47,7 +47,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, CARD_HI, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.20.0'
+APP_VERSION='3.20.1'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -1940,75 +1940,91 @@ def render_active_page():
         if not accounts and not owners:label(page_body,'Klik Tambah Pemilik atau Tambah Akun untuk memulai.',12,DIM).pack(pady=20)
     elif active_page=='Analytics':
         # Periode sama dengan Dashboard (satu periode untuk semua menu).
+        global analytics_vars
+        if 'analytics_vars' not in globals():
+            analytics_vars={'show':tk.StringVar(value='Sudah dibaca'),'cat':tk.StringVar(value='Semua Kategori'),
+                            'sort':tk.StringVar(value='Indonesia % tertinggi'),'q':tk.StringVar()}
+        try:
+            selected_start=parse_date(start_var.get());selected_end=parse_date(end_var.get())
+        except ValueError:
+            selected_start=selected_end=date.today()
+        def readings(a):
+            """Pembacaan Asal Streams akun ini untuk periode & platform terpilih (satu per artis, terbaru)."""
+            unique={}
+            for rec in sorted(a.get('region_records',[]),key=lambda x:x.get('updated','')):
+                if rec.get('platform')!=platform or rec.get('start')!=str(selected_start) or rec.get('end')!=str(selected_end):continue
+                unique[(rec.get('artist_id') or rec.get('artist_name'))]=rec
+            out=[]
+            for rec in unique.values():
+                regions={str(v.get('code','')).upper():v.get('percent') for v in rec.get('regions',[])}
+                pick=lambda codes:next((float(regions[c]) for c in codes if regions.get(c) is not None),None)
+                out.append({'artist':rec.get('artist_name') or 'Artis','id_pct':pick(('ID','IDN')),'us_pct':pick(('US','USA')),
+                            'updated':short_time(rec.get('updated'))})
+            return out
+        data=[(a,latest(a,selected_start,selected_end,platform),readings(a)) for a in accounts]
+        all_reads=[x for _,_,rs in data for x in rs]
+        def mean(key):
+            vals=[x[key] for x in all_reads if x[key] is not None]
+            return (sum(vals)/len(vals)) if vals else None
+        pct=lambda v:'—' if v is None else ('%.1f%%'%v).replace('.',',')
         intro=page_section(page_body,'Asal Streams  ·  Region Insights',
-            'Hasil hanya ditampilkan jika periode pembacaannya sama dengan periode yang dipilih.','globe',BLUE)
-        controls=tk.Frame(intro,bg=PANEL);controls.pack(fill='x',pady=(0,6))
+            f'Periode {selected_start} s.d. {selected_end} · {platform}. Persentase milik artis yang dibaca, bukan total akun.','globe',BLUE)
+        controls=tk.Frame(intro,bg=PANEL);controls.pack(fill='x',pady=(0,12))
         label(controls,'PERIODE',8,MUTED,bold=True).pack(side='left',padx=(0,10))
         PeriodButton(controls,start_var,end_var,refresh).pack(side='left')
         label(controls,'Samakan periode di Artist Insights SoundOn sebelum membaca data.',9,MUTED).pack(side='left',padx=14)
-        try:
-            selected_start=parse_date(start_var.get())
-            selected_end=parse_date(end_var.get())
-        except ValueError:
-            selected_start=selected_end=date.today()
-        batch_jobs=[]
-        for cat in categories:
-            members=[(a,latest(a,selected_start,selected_end,platform)) for a in accounts if account_category(a)==cat]
-            if not members:continue
-            group=page_section(page_body,cat,f'{len(members)} akun · asal Streams {selected_start} s.d. {selected_end}','flag' if cat.casefold()=='indonesia' else 'globe',RED if cat.casefold()=='indonesia' else BLUE)
-            def build_region_card(a,r,idx,group=group):
-                acct_shell=tk.Frame(group,bg=CARD);acct_shell.pack(fill='x',pady=4)
-                acct_box=tk.Frame(acct_shell,bg=CARD);acct_box.pack(fill='x',pady=2)
-                top=tk.Frame(acct_box,bg=CARD);top.pack(fill='x',padx=16,pady=(12,6))
-                avatar(top,a['name'],ACCENTS[idx%len(ACCENTS)],36,CARD).pack(side='left',padx=(0,12))
-                namebox=tk.Frame(top,bg=CARD);namebox.pack(side='left',fill='x',expand=True)
-                label(namebox,a['name'],11,bold=True).pack(anchor='w')
-                label(namebox,'Streams '+(number(r.get('streams',0)) if r else '—')+
-                    '   ·   Pendengar '+(number(r.get('listeners',0)) if r else '—'),9,DIM).pack(anchor='w',pady=(2,0))
-                button(top,'Baca Asal Streams',lambda a=a:read_regions(a),True,icon='sync',font_size=9,height=30).pack(side='right')
-                button(top,'↗  Buka Streams',lambda a=a:open_streams(a),font_size=9,height=30).pack(side='right',padx=8)
-                saved=[]
-                for rec in a.get('region_records',[]):
-                    if rec.get('platform')!=platform:continue
-                    try:
-                        rec_start=date.fromisoformat(rec['start'])
-                    except (ValueError,KeyError,TypeError):continue
-                    if rec_start==selected_start and rec.get('end')==str(selected_end):saved.append(rec)
-                # Deduplicate legacy entries for identical artist and date ranges.
-                unique={}
-                for rec in sorted(saved,key=lambda x:x.get('updated','')):
-                    unique[(rec.get('artist_id') or rec.get('artist_name'),rec.get('start'),rec.get('end'),rec.get('platform'))]=rec
-                saved=list(unique.values())
-                if not saved:
-                    label(acct_box,'Belum ada pembacaan untuk tanggal yang dipilih. Samakan periode Artist Insights, lalu klik Baca Asal Streams.',
-                        9,MUTED,wraplength=900,justify='left').pack(anchor='w',padx=64,pady=(0,14))
-                    return acct_shell
-                for rec in sorted(saved,key=lambda x:(x.get('start',''),x.get('artist_name','')),reverse=True):
-                    record=tk.Frame(acct_box,bg=PANEL);record.pack(fill='x',padx=14,pady=(2,12))
-                    header=tk.Frame(record,bg=PANEL);header.pack(fill='x',padx=15,pady=(11,8))
-                    UI.icon(header,'music',15,PURPLE,PANEL).pack(side='left',padx=(0,7))
-                    label(header,rec.get('artist_name','Artis'),11,bold=True).pack(side='left')
-                    label(header,rec.get('start','?')+'  →  '+rec.get('end','?'),9,BLUE).pack(side='right')
-                    regions={str(v.get('code','')).upper():v.get('percent') for v in rec.get('regions',[])}
-                    for codes,title,color in [(('ID','IDN'),'INDONESIA',GREEN),
-                                              (('US','USA'),'AMERIKA SERIKAT',PURPLE)]:
-                        value=next((regions[c] for c in codes if c in regions),None)
-                        line=tk.Frame(record,bg=PANEL);line.pack(fill='x',padx=15,pady=5)
-                        label(line,title,9,DIM,bold=True).pack(side='left')
-                        label(line,('—' if value is None else f'{float(value):.2f}%'.replace('.',',')),
-                            12,color,bold=True).pack(side='right')
-                        bar=tk.Canvas(record,height=8,bg=CARD,highlightthickness=0)
-                        bar.pack(fill='x',padx=15,pady=(0,7))
-                        def paint(event,b=bar,v=value,c=color):
-                            b.delete('all');width=max(0,event.width)
-                            b.create_rectangle(0,0,width,8,fill=LINE,outline='')
-                            if v is not None:b.create_rectangle(0,0,width*max(0,min(100,float(v)))/100,8,fill=c,outline='')
-                        bar.bind('<Configure>',paint)
-                    label(record,'Platform: '+rec.get('platform','—')+'   ·   Dibaca: '+rec.get('updated','—')+
-                        '   ·   Data artis, bukan total akun',8,DIM).pack(anchor='w',padx=15,pady=(2,11))
-                return acct_shell
-            batch_jobs.extend((lambda a=a,r=r,idx=idx,build=build_region_card:build(a,r,idx)) for idx,(a,r) in enumerate(sorted(members,key=lambda item:item[0]['name'].lower())))
-        build_in_batches(batch_jobs,lambda card:None,batch=6)
+        tiles=tk.Frame(intro,bg=PANEL);tiles.pack(fill='x',pady=(0,4))
+        read_accounts=sum(1 for _,_,rs in data if rs)
+        for i,(title,icon,value,sub) in enumerate([
+                ('Akun sudah dibaca','users',f'{read_accounts}/{len(accounts)}',f'{len(accounts)-read_accounts} akun belum dibaca'),
+                ('Rata-rata Indonesia','flag',pct(mean('id_pct')),'dari semua artis terbaca'),
+                ('Rata-rata Amerika Serikat','globe',pct(mean('us_pct')),'dari semua artis terbaca'),
+                ('Artis terbaca','music',str(len(all_reads)),'pada periode ini')]):
+            card=DC.StatCard(tiles,title,icon,height=118);card.grid(row=0,column=i,sticky='nsew',padx=(0 if i==0 else 6,0))
+            tiles.grid_columnconfigure(i,weight=1,uniform='an')
+            card.set(value,sub)
+        # Filter (hanya tabel yang diperbarui; kolom pencarian tidak dibangun ulang).
+        listing=page_section(page_body,'Per artis','Klik Baca untuk membaca Asal Streams akun itu, atau Buka untuk membuka Analytics SoundOn.','chart',PURPLE)
+        bar_f=tk.Frame(listing,bg=PANEL);bar_f.pack(fill='x',pady=(0,10))
+        v=analytics_vars
+        # Lepas pemantau dari halaman sebelumnya (widgetnya sudah dihancurkan) sebelum membuat yang baru.
+        for var in v.values():
+            for trace in var.trace_info():
+                try:var.trace_remove(*trace)
+                except tk.TclError:pass
+        for var,values,width in [(v['show'],['Sudah dibaca','Belum dibaca','Semua akun'],14),
+                                 (v['cat'],['Semua Kategori']+categories,17),
+                                 (v['sort'],['Indonesia % tertinggi','Amerika Serikat % tertinggi','Nama A–Z'],24)]:
+            ttk.Combobox(bar_f,textvariable=var,values=values,state='readonly',style='Dark.TCombobox',width=width).pack(side='left',padx=(0,8))
+        UI.search_entry(bar_f,v['q'],'Cari akun atau artis…',width=24).pack(side='right')
+        table=DC.RegionTable(listing,open_streams,read_regions);table.pack(fill='x')
+        def rows():
+            q=v['q'].get().strip().casefold();show=v['show'].get();cat=v['cat'].get();key=v['sort'].get()
+            picked=[]
+            for idx,(a,r,rs) in enumerate(data):
+                if cat!='Semua Kategori' and account_category(a)!=cat:continue
+                if show=='Sudah dibaca' and not rs:continue
+                if show=='Belum dibaca' and rs:continue
+                if q and q not in a['name'].casefold() and not any(q in x['artist'].casefold() for x in rs):continue
+                picked.append((a,r,rs))
+            if key=='Nama A–Z':picked.sort(key=lambda x:x[0]['name'].casefold())
+            else:
+                k='id_pct' if key.startswith('Indonesia') else 'us_pct'
+                picked.sort(key=lambda x:max([y[k] for y in x[2] if y[k] is not None] or [-1]),reverse=True)
+            out=[]
+            for n,(a,r,rs) in enumerate(picked):
+                base={'account':a,'name':a['name'],'sub':f'{account_category(a)} · #{a["id"]}','accent':ACCENTS[n%len(ACCENTS)],
+                      'streams':number(r.get('streams',0)) if r else '—'}
+                if not rs:out.append(dict(base,artist=None,first=True));continue
+                k='us_pct' if key.startswith('Amerika') else 'id_pct'
+                for j,x in enumerate(sorted(rs,key=lambda y:-(y[k] if y[k] is not None else -1))):
+                    out.append(dict(base,first=j==0,**x))
+            return out
+        def update_table(*_):
+            if table.winfo_exists():table.set(rows())
+        for var in (v['show'],v['cat'],v['sort'],v['q']):
+            var.trace_add('write',update_table)
+        update_table()
         if not accounts:label(page_body,'Belum ada akun.',12,DIM).pack(pady=20)
     elif active_page=='Penghasilan':
         # Two independent currencies: never add USD to IDR without a real exchange rate.
