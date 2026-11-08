@@ -47,7 +47,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.20.3'
+APP_VERSION='3.21.0'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -655,6 +655,7 @@ METRIC_LABELS = {
 
 # ---------------------------------------------------------------- sinkron otomatis
 import auto_sync
+import transactions as TX
 SYNC_LOG=os.path.join(BASE,'sync_log.txt')
 _sync_state={'running':False,'stop':False,'text':''}
 
@@ -669,6 +670,7 @@ def sync_settings():
     return {'enabled':bool(st.get('sync_enabled',True)),'hour':hour,'open_closed':bool(st.get('sync_open_closed',True)),
             'balance':bool(st.get('sync_balance',True)),'regions':bool(st.get('sync_regions',True)),
             'retry_failed':bool(st.get('sync_retry_failed',True)),
+            'transactions':bool(st.get('sync_transactions',True)),
             'workers':_sync_workers(st.get('sync_workers',1)),'hidden':bool(st.get('sync_hidden',True)),
             'last_date':st.get('sync_last_date',''),'last_summary':st.get('sync_last_summary','')}
 
@@ -752,11 +754,11 @@ def start_sync(auto=False,periods=None,only_ids=None,plat=None):
         if not targets:
             messagebox.showinfo('Tidak ada akun','Akun yang perlu diulang sudah tidak ada di daftar.',parent=root);return
     if not auto and only_ids is None:
-        minutes=max(1,round(len(targets)*(35+(25 if cfg['balance'] else 0)+(60 if cfg['regions'] else 0))/60/cfg['workers']))
+        minutes=max(1,round(len(targets)*(35+(25 if cfg['balance'] else 0)+(60 if cfg['regions'] else 0)+(20 if cfg['transactions'] else 0))/60/cfg['workers']))
         extra=(('Chrome akun yang tertutup dibuka '+('tanpa jendela (tersembunyi)' if cfg['hidden'] else '(diperkecil)')+' lalu ditutup lagi.')
                if cfg['open_closed'] else 'Hanya akun yang Chrome-nya sedang terbuka yang dibaca.')
         if cfg['workers']>1:extra+=f'\n{cfg["workers"]} Chrome dibaca bersamaan.'
-        what='Streams & Pendengar'+(', Saldo' if cfg['balance'] else '')+(', Asal Streams per artis' if cfg['regions'] else '')
+        what='Streams & Pendengar'+(', Saldo' if cfg['balance'] else '')+(', Asal Streams per artis' if cfg['regions'] else '')+(', Riwayat Transaksi' if cfg['transactions'] else '')
         ptxt=', '.join(f'{p[0]} s.d. {p[1]}' for p in periods)
         if not messagebox.askyesno('Sinkron semua akun',f'Baca {what} untuk {len(targets)} akun\nPeriode: {ptxt} · {plat}\n\n{extra}\n'
                                    f'Perkiraan waktu ± {minutes} menit. Aplikasi tetap bisa dipakai.{note}\n\nMulai sekarang?',parent=root):return
@@ -768,6 +770,9 @@ def start_sync(auto=False,periods=None,only_ids=None,plat=None):
             a['balance']=amount;a['currency']=currency;a['balance_updated']=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             persist()
             if active_page=='Dashboard':refresh()
+    def apply_transactions(a,rows):
+        if a in accounts:
+            a['transactions']=TX.merge(a.get('transactions'),rows);persist()
     def apply_region(a,row):
         if a in accounts:
             existing=a.setdefault('region_records',[])
@@ -788,7 +793,8 @@ def start_sync(auto=False,periods=None,only_ids=None,plat=None):
         on_balance=lambda a,n,c:ui_call(lambda:apply_balance(a,n,c)),
         read_regions=(lambda page:page.evaluate(REGION_SVG_JS)) if cfg['regions'] else None,
         on_region=lambda a,row:ui_call(lambda:apply_region(a,row)),retry_failed=cfg['retry_failed'],
-        workers=cfg['workers'],hidden=cfg['hidden'])
+        workers=cfg['workers'],hidden=cfg['hidden'],
+        on_transactions=(lambda a,rows:ui_call(lambda:apply_transactions(a,rows))) if cfg['transactions'] else None)
     def worker():
         try:summary=syncer.run(targets);error=None
         except Exception as exc:
@@ -2045,12 +2051,70 @@ def render_active_page():
             card=DC.StatCard(tiles,title,icon,height=118);card.grid(row=0,column=i,sticky='nsew',padx=(0 if i==0 else 6,0))
             tiles.grid_columnconfigure(i,weight=1,uniform='pg')
             card.set(value,sub,chip,col)
-        listing=page_section(page_body,'Saldo per akun','Dikelompokkan per mata uang dan diurutkan dari saldo terbesar. Klik Baca Saldo untuk memperbarui satu akun.','chart',PURPLE)
         v=get_earnings_vars()
         for var in v.values():
             for trace in var.trace_info():
                 try:var.trace_remove(*trace)
                 except tk.TclError:pass
+        # ---- Rekap pendapatan bulanan (dari Riwayat Transaksi SoundOn)
+        recap=page_section(page_body,'Rekap pendapatan bulanan','Dari Riwayat Transaksi SoundOn: Transfer masuk (ROYALTY) = pendapatan, Tarik = penarikan. '
+                           'Terisi lewat Sinkron (Pengaturan > Sinkron Otomatis > Baca juga Riwayat Transaksi).','calendar',GREEN)
+        rbar=tk.Frame(recap,bg=PANEL);rbar.pack(fill='x',pady=(0,10))
+        label(rbar,'BULAN',8,MUTED,bold=True).pack(side='left',padx=(0,10))
+        MonthButton(rbar,v['month']).pack(side='left')
+        button(rbar,'Ekspor CSV',lambda:export_recap_csv(v['month'].get()),icon='export').pack(side='right')
+        rtiles=tk.Frame(recap,bg=PANEL);rtiles.pack(fill='x',pady=(0,12))
+        recap_cards={}
+        for i,(key,title,icon) in enumerate([('idr','Pendapatan Rupiah','flag'),('usd','Pendapatan Dolar AS','globe'),
+                                             ('out','Ditarik','export'),('acc','Akun dengan pendapatan','users')]):
+            card=DC.StatCard(rtiles,title,icon,height=118);card.grid(row=0,column=i,sticky='nsew',padx=(0 if i==0 else 6,0))
+            rtiles.grid_columnconfigure(i,weight=1,uniform='rk');recap_cards[key]=card
+        rcharts=tk.Frame(recap,bg=PANEL);rcharts.pack(fill='x',pady=(0,12))
+        rcharts.grid_columnconfigure(0,weight=1,uniform='rc');rcharts.grid_columnconfigure(1,weight=1,uniform='rc')
+        chart_idr=DC.LineChart(rcharts,'Pendapatan Rupiah per bulan',height=240);chart_idr.grid(row=0,column=0,sticky='nsew',padx=(0,6))
+        chart_usd=DC.LineChart(rcharts,'Pendapatan Dolar AS per bulan',height=240);chart_usd.grid(row=0,column=1,sticky='nsew',padx=(6,0))
+        recap_table=DC.BalanceTable(recap,open_balance,lambda a:start_sync(periods=None,only_ids=[a['id']]),
+                                    value_title='PENDAPATAN BULAN INI',extra_title='DITARIK',read_text='Sinkron',empty_text='Tidak ada')
+        recap_table.pack(fill='x')
+        def months_back(month,n=6):
+            y,m=map(int,month.split('-'));out=[]
+            for _ in range(n):
+                out.append('%04d-%02d'%(y,m));m-=1
+                if m==0:y,m=y-1,12
+            return out[::-1]
+        def update_recap(*_):
+            if not recap_table.winfo_exists():return
+            month=v['month'].get()
+            sums={a['id']:TX.month_summary(a.get('transactions'),month) for a in accounts}
+            tot=lambda c,k:sum(x.get(c,{}).get(k,0) for x in sums.values())
+            has_tx=sum(1 for a in accounts if a.get('transactions'))
+            recap_cards['idr'].set(money(tot('IDR','income'),'IDR'),f'{month} · {sum(1 for x in sums.values() if x.get("IDR",{}).get("income"))} akun')
+            recap_cards['usd'].set(money(tot('USD','income'),'USD'),f'{month} · {sum(1 for x in sums.values() if x.get("USD",{}).get("income"))} akun')
+            recap_cards['out'].set(money(tot('IDR','out'),'IDR'),money(tot('USD','out'),'USD')+' (USD)')
+            earning=sum(1 for x in sums.values() if any(c.get('income') for c in x.values()))
+            recap_cards['acc'].set(f'{earning}/{len(accounts)}',f'{has_tx} akun punya riwayat transaksi' if has_tx else 'Jalankan Sinkron untuk mengisi',
+                                   '' if has_tx else 'Sinkron',AMBER)
+            labels=months_back(month)
+            series=lambda c:[sum(TX.month_summary(a.get('transactions'),m).get(c,{}).get('income',0) for a in accounts) or None for m in labels]
+            short=[BULAN_PENDEK[int(m[5:])-1] for m in labels]
+            chart_idr.set(money(tot('IDR','income'),'IDR'),short,[('Rupiah',GREEN,series('IDR'))])
+            chart_usd.set(money(tot('USD','income'),'USD'),short,[('Dolar AS',DC.ACCENT,series('USD'))])
+            rows=[]
+            for c,title in (('IDR','Rupiah (IDR)'),('USD','Dolar AS (USD)')):
+                group=[(a,sums[a['id']].get(c)) for a in accounts if cur(a)==c or sums[a['id']].get(c)]
+                if not group:continue
+                group.sort(key=lambda x:(x[1] or {}).get('income',0),reverse=True)
+                hi=max([(s or {}).get('income',0) for _,s in group] or [0]) or 1
+                rows.append({'kind':'group','title':title,'count':len(group),'total':money(sum((s or {}).get('income',0) for _,s in group),c)})
+                for n,(a,s) in enumerate(group):
+                    inc=(s or {}).get('income',0);out=(s or {}).get('out',0)
+                    rows.append({'kind':'account','account':a,'name':a['name'],'sub':f'{account_category(a)} · #{a["id"]}',
+                                 'value':money(inc,c),'part':inc/hi,'known':bool(inc),'top':inc==hi and inc>0,
+                                 'updated':money(out,c) if out else '—','accent':ACCENTS[n%len(ACCENTS)]})
+            recap_table.set(rows)
+        v['month'].trace_add('write',update_recap)
+        update_recap()
+        listing=page_section(page_body,'Saldo per akun','Dikelompokkan per mata uang dan diurutkan dari saldo terbesar. Klik Baca Saldo untuk memperbarui satu akun.','chart',PURPLE)
         bar_f=tk.Frame(listing,bg=PANEL);bar_f.pack(fill='x',pady=(0,10))
         for var,values,width in [(v['country'],['Semua negara','Indonesia','Amerika Serikat','Kategori lain'],16),
                                  (v['show'],['Semua akun','Ada saldo','Saldo 0','Belum dibaca'],13),
@@ -2094,7 +2158,7 @@ def render_active_page():
             return out
         def update_table(*_):
             if table.winfo_exists():table.set(rows())
-        for var in v.values():var.trace_add('write',update_table)
+        for key in ('country','show','sort','q'):v[key].trace_add('write',update_table)
         update_table()
     elif active_page=='Inventaris HP':
         intro=page_section(page_body,'Inventaris Perangkat',
@@ -2175,10 +2239,11 @@ def render_active_page():
         en_var=tk.BooleanVar(value=cfg['enabled']);oc_var=tk.BooleanVar(value=cfg['open_closed']);hr_var=tk.StringVar(value='%02d:00'%cfg['hour'])
         bal_var=tk.BooleanVar(value=cfg['balance']);reg_var=tk.BooleanVar(value=cfg['regions'])
         rt_var=tk.BooleanVar(value=cfg['retry_failed']);hid_var=tk.BooleanVar(value=cfg['hidden'])
+        tx_var=tk.BooleanVar(value=cfg['transactions'])
         wk_var=tk.StringVar(value=str(cfg['workers']))
         def save_sync(*_):
             try:UI.save_settings(sync_enabled=en_var.get(),sync_open_closed=oc_var.get(),sync_hour=int(hr_var.get()[:2]),
-                                 sync_balance=bal_var.get(),sync_regions=reg_var.get(),sync_retry_failed=rt_var.get(),
+                                 sync_balance=bal_var.get(),sync_regions=reg_var.get(),sync_retry_failed=rt_var.get(),sync_transactions=tx_var.get(),
                                  sync_hidden=hid_var.get(),sync_workers=_sync_workers(wk_var.get()))
             except (OSError,ValueError):pass
         row1=tk.Frame(syn,bg=PANEL);row1.pack(fill='x',pady=(0,6))
@@ -2188,6 +2253,7 @@ def render_active_page():
         UI.dark_checkbutton(syn,'  Buka Chrome akun yang tertutup (diperkecil), lalu tutup lagi setelah dibaca',oc_var,PANEL,command=save_sync).pack(anchor='w')
         UI.dark_checkbutton(syn,'  Baca juga Saldo tersedia (My Earnings)',bal_var,PANEL,command=save_sync).pack(anchor='w')
         UI.dark_checkbutton(syn,'  Baca juga Asal Streams per artis (Indonesia / Amerika Serikat), maks. 12 artis per akun',reg_var,PANEL,command=save_sync).pack(anchor='w')
+        UI.dark_checkbutton(syn,'  Baca juga Riwayat Transaksi (untuk Rekap pendapatan bulanan di Penghasilan)',tx_var,PANEL,command=save_sync).pack(anchor='w')
         UI.dark_checkbutton(syn,'  Sembunyikan Chrome sinkron (tanpa jendela; bila SoundOn menolak, akun itu dibaca dengan Chrome diperkecil)',
                             hid_var,PANEL,command=save_sync).pack(anchor='w')
         row_wk=tk.Frame(syn,bg=PANEL);row_wk.pack(fill='x',pady=(2,2))
@@ -2454,12 +2520,36 @@ def get_analytics_vars():
                                sort=tk.StringVar(value='Indonesia % tertinggi'),q=tk.StringVar())
     return _analytics_vars
 
+def _last_full_month():
+    """Bulan lalu (YYYY-MM): pendapatan SoundOn masuk sekitar tanggal 24-25 untuk bulan sebelumnya."""
+    t=date.today().replace(day=1)-timedelta(days=1)
+    return t.strftime('%Y-%m')
+
+def export_recap_csv(month):
+    """Simpan rekap pendapatan satu bulan ke CSV (bisa dibuka di Excel)."""
+    import csv
+    path=filedialog.asksaveasfilename(title='Ekspor rekap pendapatan',defaultextension='.csv',
+                                      initialfile=f'Rekap_Pendapatan_SoundOn_{month}.csv',filetypes=[('CSV','*.csv')],parent=root)
+    if not path:return
+    try:
+        with open(path,'w',newline='',encoding='utf-8-sig') as f:
+            w=csv.writer(f,delimiter=';')
+            w.writerow(['Bulan','ID akun','Akun','Kategori','Mata uang','Pendapatan','Ditarik','Jumlah transaksi'])
+            for a in sorted(accounts,key=lambda a:a['name'].casefold()):
+                for c,v in TX.month_summary(a.get('transactions'),month).items():
+                    w.writerow([month,a['id'],a['name'],account_category(a),c,f'{v["income"]:.2f}'.replace('.',','),
+                                f'{v["out"]:.2f}'.replace('.',','),v['count']])
+    except OSError as ex:
+        messagebox.showerror('Gagal menyimpan',str(ex),parent=root);return
+    messagebox.showinfo('Rekap tersimpan','Rekap '+month+' disimpan ke:\n'+path,parent=root)
+
 _earnings_vars={}
 def get_earnings_vars():
     """Filter halaman Penghasilan (tetap selama aplikasi terbuka)."""
     if not _earnings_vars:
         _earnings_vars.update(country=tk.StringVar(value='Semua negara'),show=tk.StringVar(value='Semua akun'),
-                              sort=tk.StringVar(value='Saldo terbesar'),q=tk.StringVar())
+                              sort=tk.StringVar(value='Saldo terbesar'),q=tk.StringVar(),
+                              month=tk.StringVar(value=_last_full_month()))
     return _earnings_vars
 
 def open_region_warnings():

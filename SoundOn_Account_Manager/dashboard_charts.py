@@ -546,10 +546,12 @@ class BalanceTable(tk.Canvas):
            [dict(kind='account', account, name, sub, value, part 0..1, known, updated, accent)]"""
     HEAD, ROW, GROUP = 38, 50, 40
 
-    def __init__(self, parent, on_open, on_read):
+    def __init__(self, parent, on_open, on_read, value_title='SALDO TERSEDIA', extra_title='DIPERBARUI',
+                 read_text='Baca Saldo', empty_text='Belum dibaca'):
         self._bg = parent.cget('bg')
         super().__init__(parent, height=self.HEAD + self.ROW, bg=self._bg, highlightthickness=0, bd=0)
         self.on_open, self.on_read = on_open, on_read
+        self.value_title, self.extra_title, self.read_text, self.empty_text = value_title, extra_title, read_text, empty_text
         self.rows, self._hits, self._ys, self._hover = [], [], [], None
         self.bind('<Configure>', lambda e: self.redraw())
         self.bind('<Motion>', self._motion)
@@ -565,7 +567,7 @@ class BalanceTable(tk.Canvas):
     def _cols(self, w):
         act = 176
         rest = max(400, w - act)
-        spec = [('no', '#', 0.05), ('akun', 'AKUN', 0.33), ('saldo', 'SALDO TERSEDIA', 0.42), ('upd', 'DIPERBARUI', 0.2)]
+        spec = [('no', '#', 0.05), ('akun', 'AKUN', 0.33), ('saldo', self.value_title, 0.42), ('upd', self.extra_title, 0.2)]
         x, cols = 0, {}
         for key, title, part in spec:
             cols[key] = (x, rest * part, title)
@@ -627,13 +629,13 @@ class BalanceTable(tk.Canvas):
                 rounded_rect(self, bx0, cy - 3, bx0 + max(6, (bx1 - bx0) * min(1, r['part'])), cy + 3, 3,
                              GREEN if r.get('top') else mix(GREEN, self._bg, 0.35))
         zero = known and not r.get('part')
-        self.create_text(x + cw - 10, cy, text=r['value'] if known else 'Belum dibaca',
+        self.create_text(x + cw - 10, cy, text=r['value'] if known else self.empty_text,
                          fill=(MUTED if (not known or zero) else GREEN), font=_font(10, bool(known and not zero)), anchor='e')
         x, cw, _ = cols['upd']
         self.create_text(x + 14, cy, text=r.get('updated') or '—', fill=MUTED, font=_font(8), anchor='w')
         x, aw, _ = cols['aksi']
         right = x + aw - 10
-        for key, text, primary in (('read', 'Baca Saldo', True), ('open', 'Buka', False)):
+        for key, text, primary in (('read', self.read_text, True), ('open', 'Buka', False)):
             bw = text_width(_font(9, True), text) + 24
             rounded_rect(self, right - bw, cy - 14, right, cy + 14, 14, ACCENT if primary else mix(self._bg, INK, 0.1))
             self.create_text(right - bw / 2, cy, text=text, fill='#ffffff' if primary else WHITE, font=_font(9, True))

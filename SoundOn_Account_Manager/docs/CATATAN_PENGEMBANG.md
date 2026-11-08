@@ -44,6 +44,7 @@ Untuk Claude (atau pengembang lain) yang melanjutkan aplikasi ini di sesi baru.
 - `soundon_dashboard.py` — aplikasi utama (Dashboard, Daftar Akun, Analytics, Penghasilan,
   Inventaris HP, Pengaturan), sinkron otomatis, pembaruan berkala.
 - `auto_sync.py` — sinkron Streams/Pendengar/Saldo/Asal Streams lewat Chrome (CDP, port 20000+id).
+- `transactions.py` — baca & rekap Riwayat Transaksi SoundOn (a['transactions'], Rekap pendapatan bulanan).
 - `updater.py` — pembaruan dari GitHub Releases (SHA-256, cadangan, exit code 75).
 - `tools/buat_rilis.py` — membuat paket rilis (dipakai GitHub Actions).
 - `upload_manager.py` — Studio unggah; `upload_quick.py` — tombol Unggah per akun + Pengaturan unggah (ui_settings `upload_defaults`); `upload_folder.py` — folder pantau (~/SoundOnUnggah, opsional). `account_table.py`, `date_picker.py`, `ui_theme.py` — UI; `dashboard_charts.py` — kartu & grafik Dashboard (Canvas).

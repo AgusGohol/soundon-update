@@ -19,6 +19,8 @@ import subprocess
 import threading
 import time
 import urllib.parse
+
+import transactions as TX
 from datetime import date, datetime
 
 ANALYTICS_URL = 'https://www.soundon.global/library/analytics'
@@ -153,7 +155,7 @@ class Syncer:
     def __init__(self, *, start, end, platform, open_closed, chrome_path, profile_dir, port_for, ready,
                  read_card, parse_number, on_progress, on_result, should_stop, busy_account=None, log=None,
                  read_balance=None, on_balance=None, read_regions=None, on_region=None, periods=None,
-                 retry_failed=False, workers=1, hidden=False):
+                 retry_failed=False, workers=1, hidden=False, on_transactions=None):
         self.retry_failed = retry_failed      # ulang sekali akun yang belum berhasil di akhir sinkron
         self.workers = max(1, min(3, int(workers or 1)))   # jumlah Chrome yang dibaca bersamaan
         self.hidden = hidden                  # Chrome sinkron tanpa jendela (lihat _launch)
@@ -177,6 +179,7 @@ class Syncer:
         self.log = locked_log
         self.read_balance, self.on_balance = read_balance, on_balance      # saldo (My Earnings)
         self.read_regions, self.on_region = read_regions, on_region        # asal Streams per artis
+        self.on_transactions = on_transactions                             # riwayat transaksi (rekap bulanan)
 
     # ------------------------------------------------------------ helpers
     def _sleep(self, seconds):
@@ -354,6 +357,48 @@ class Syncer:
                 self.on_balance(a, amount, currency)
                 return 'saldo ' + str(raw).strip()
         return 'saldo tidak terbaca'
+
+    def _transactions(self, page, a):
+        """Baca Riwayat Transaksi (beberapa halaman) untuk rekap pendapatan bulanan."""
+        page.goto(TX.TRANSACTIONS_URL, wait_until='domcontentloaded', timeout=60000)
+        skipped, got, info = [0], None, ''
+        for _ in range(40):
+            self._sleep(0.5)
+            if 'login' in page.url.lower():
+                return 'transaksi: perlu login'
+            if self._is_upgrade_page(page):
+                if self._skip_promo(page, TX.TRANSACTIONS_URL, skipped):
+                    continue
+                return 'transaksi: SoundOn menampilkan halaman paket (Upgrade)'
+            data = page.evaluate(TX.READ_JS) or {}
+            info = data.get('info', '')
+            if data.get('rows'):
+                got = data['rows']
+                break
+            if info and re.search(r'(?:dari|of)\s+0\b', info, re.I):
+                return 'transaksi: belum ada'
+        if not got:
+            return 'transaksi tidak terbaca'
+        rows = list(got)
+        total = TX.total_from_info(info)
+        pages = min(TX.MAX_PAGES, -(-total // 10)) if total else TX.MAX_PAGES
+        for n in range(2, pages + 1):
+            if not page.evaluate(TX.NEXT_JS, n):
+                break
+            first = got[0][0]
+            page.locator('[data-soundon-next]').first.click(timeout=8000)
+            for _ in range(20):                       # tunggu isi tabel berganti
+                self._sleep(0.5)
+                data = page.evaluate(TX.READ_JS) or {}
+                if data.get('rows') and data['rows'][0][0] != first:
+                    got = data['rows']
+                    break
+            else:
+                break
+            rows.extend(got)
+        parsed = TX.parse_rows(rows)
+        self.on_transactions(a, parsed)
+        return 'transaksi %d baris' % len(parsed)
 
     def _open_artists_tab(self, page):
         url = analytics_url(self.start, self.end, self.platform)
@@ -663,6 +708,13 @@ class Syncer:
                     raise
                 except Exception as exc:
                     note += ' · asal Streams gagal: ' + str(exc).split('\n')[0][:120]
+            if self.on_transactions:
+                try:
+                    note += ' · ' + self._transactions(page, a)
+                except SyncStopped:
+                    raise
+                except Exception as exc:
+                    note += ' · transaksi gagal: ' + str(exc).split('\n')[0][:120]
             if self.read_balance and self.on_balance:
                 try:
                     note += ' · ' + self._balance(page, a)

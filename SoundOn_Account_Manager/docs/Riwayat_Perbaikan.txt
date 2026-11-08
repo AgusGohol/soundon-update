@@ -309,3 +309,10 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 - Ringkasan di atas: total saldo Rupiah, total saldo Dolar AS, jumlah akun yang punya saldo, akun yang belum dibaca, dan saldo terbesar.
 - Satu tabel saldo per akun, dikelompokkan per mata uang (dengan subtotal) dan diurutkan dari saldo terbesar, lengkap dengan batang perbandingan, waktu diperbarui, serta tombol Buka dan Baca Saldo.
 - Filter negara, status saldo (Ada saldo / Saldo 0 / Belum dibaca), urutan, dan pencarian akun. IDR dan USD tetap tidak dijumlahkan.
+
+
+3.21.0: Rekap pendapatan bulanan dari Riwayat Transaksi SoundOn.
+- Sinkron kini juga membaca Riwayat Transaksi tiap akun (Penghasilan > Riwayat Transaksi), hingga 6 halaman tabel (±2,5 tahun), dalam bahasa Indonesia maupun Inggris. Transfer masuk (ROYALTY) dihitung sebagai pendapatan, Tarik sebagai penarikan. Bisa dimatikan di Pengaturan > Sinkron Otomatis.
+- Penghasilan > Rekap pendapatan bulanan: pilih bulan untuk melihat pendapatan Rupiah dan Dolar AS, total yang ditarik, jumlah akun yang berpendapatan, grafik pendapatan 6 bulan, dan tabel pendapatan per akun.
+- Tombol Ekspor CSV menyimpan rekap bulan terpilih (bisa dibuka di Excel).
+- Tombol Sinkron di tabel rekap membaca ulang satu akun saja.
