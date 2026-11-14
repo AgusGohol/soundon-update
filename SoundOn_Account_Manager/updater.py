@@ -490,7 +490,7 @@ def _run_with_splash(manifest, app_dir, current_version, data_dir):
     win.resizable(False, False)
     w, h = 460, 170
     win.geometry('%dx%d+%d+%d' % (w, h, (win.winfo_screenwidth() - w) // 2, (win.winfo_screenheight() - h) // 2))
-    tk.Label(win, text='Memperbarui SoundOn Account Manager', bg='#09111f', fg='#f5f8ff',
+    tk.Label(win, text='Memperbarui Dashboard Distributor', bg='#09111f', fg='#f5f8ff',
              font=('Segoe UI', 13, 'bold')).pack(anchor='w', padx=22, pady=(22, 4))
     tk.Label(win, text='Versi %s  →  %s' % (current_version, manifest['version']), bg='#09111f', fg='#24d6a0',
              font=('Segoe UI', 10)).pack(anchor='w', padx=22)

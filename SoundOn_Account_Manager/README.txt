@@ -1,4 +1,4 @@
-SoundOn Account Manager 3.22.2
+Dashboard Distributor (SoundOn Account Manager) 4.0.0
 
 Mulai: klik run_app.bat.
 Instal kebutuhan pertama kali: install_dependencies.bat.

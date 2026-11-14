@@ -202,7 +202,10 @@ class AccountTable(tk.Frame):
         bh = 30
         right = x + w - 10
         specs = []
+        manual = (r.get('account') or {}).get('distributor', 'SoundOn') != 'SoundOn'
         for key, label, icon_name, variant in reversed(buttons):
+            if manual and key in ('upload', 'read'):
+                continue          # distributor tanpa unggah/sinkron otomatis
             font = F_BTN_BOLD if variant == 'primary' else F_BTN
             tw = text_width(font, label) if label else 0
             bw = (tw + 22 + (20 if icon_name and label else 0)) if label else 30

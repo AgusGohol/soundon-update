@@ -38,10 +38,15 @@ Untuk Claude (atau pengembang lain) yang melanjutkan aplikasi ini di sesi baru.
 - Thread latar tidak menyentuh Tk langsung — pakai `ui_call(fn)`.
 - Studio unggah: setiap proses punya `cancel` sendiri (`self.run`); tunggu di alur harus lewat
   `Flow.check()` agar berdetak, karena 4 menit tanpa detak dilepas pengaman macet (`watchdog()`).
+- Multi-distributor (4.0.0): `ALL_ACCOUNTS` = semua akun (yang disimpan `persist()`); `accounts` = tampilan
+  distributor aktif, `soundon_list` = akun SoundOn. Keduanya diisi ulang di tempat oleh `_rebuild_views()`
+  (dipanggil `persist()`). Tambah/hapus/impor akun selalu lewat `ALL_ACCOUNTS`. Sinkron, Ulangi, dan Studio
+  unggah hanya memakai `soundon_list`. Akun tanpa 'distributor' = SoundOn. Distributor lain: input manual
+  (`edit()`; pendapatan bulanan = transaksi remark 'MANUAL'). Daftar distributor di `distributors.py`.
 - Hanya halaman aktif yang hidup (batas handle Windows); halaman lain dihancurkan saat pindah menu.
 
 ## Berkas utama
-- `soundon_dashboard.py` — aplikasi utama (Dashboard, Daftar Akun, Analytics, Penghasilan,
+- `soundon_dashboard.py` — aplikasi utama (Semua Distributor, Dashboard, Daftar Akun, Analytics, Penghasilan,
   Inventaris HP, Pengaturan), sinkron otomatis, pembaruan berkala.
 - `auto_sync.py` — sinkron Streams/Pendengar/Saldo/Asal Streams lewat Chrome (CDP, port 20000+id).
 - `transactions.py` — baca & rekap Riwayat Transaksi SoundOn (a['transactions'], Rekap pendapatan bulanan).

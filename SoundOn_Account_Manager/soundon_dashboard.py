@@ -11,6 +11,7 @@ import urllib.request
 import sys
 import urllib.parse
 import base64
+import webbrowser
 import tkinter as tk
 if sys.stdout is None or sys.stderr is None:
     # Dibuka dengan pythonw (tanpa jendela cmd): pesan galat dicatat ke file.
@@ -47,7 +48,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.22.2'
+APP_VERSION='4.0.0'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -71,7 +72,19 @@ def read_accounts():
         return data if isinstance(data,list) else []
     except (OSError,ValueError): return []
 
-accounts=read_accounts()
+# Semua akun (semua distributor) disimpan bersama di accounts.json. `accounts` adalah tampilan
+# distributor yang sedang dibuka; `soundon_list` hanya akun SoundOn (sinkron & Studio unggah).
+import distributors as D
+ALL_ACCOUNTS=read_accounts()
+for _a in ALL_ACCOUNTS:_a.setdefault('distributor',D.DEFAULT)
+ACTIVE_DIST=[D.active()]
+accounts=[];soundon_list=[]
+def _rebuild_views():
+    accounts[:]=[a for a in ALL_ACCOUNTS if D.of(a)==ACTIVE_DIST[0]]
+    soundon_list[:]=[a for a in ALL_ACCOUNTS if D.of(a)==D.DEFAULT]
+_rebuild_views()
+def is_soundon(a=None):
+    return D.is_auto(D.of(a) if a is not None else ACTIVE_DIST[0])
 # Naik setiap data disimpan; halaman dirender ulang hanya bila data/filter berubah.
 DATA_VERSION=[0]
 OWNER_FILE=os.path.join(BASE,'owners.json')
@@ -164,7 +177,7 @@ def load_phone_inventory():
     except (OSError,ValueError,TypeError): return defaults.copy()
 phone_inventory=load_phone_inventory()
 def assigned_phone_count():
-    return sum(max(0,int(a.get('phone_count',0) or 0)) for a in accounts)
+    return sum(max(0,int(a.get('phone_count',0) or 0)) for a in ALL_ACCOUNTS)
 def save_phone_inventory():
     DATA_VERSION[0]+=1
     tmp=INVENTORY_FILE+'.tmp'
@@ -191,7 +204,8 @@ def account_category(a):
 def persist():
     DATA_VERSION[0]+=1
     tmp=FILE+'.tmp'
-    with open(tmp,'w',encoding='utf-8') as f: json.dump(accounts,f,indent=2,ensure_ascii=False)
+    _rebuild_views()
+    with open(tmp,'w',encoding='utf-8') as f: json.dump(ALL_ACCOUNTS,f,indent=2,ensure_ascii=False)
     os.replace(tmp,FILE)
 
 def chrome_path():
@@ -325,8 +339,23 @@ def debugger_ready(a):
     except Exception:
         return False
 
-def open_account(a, target_url=URL):
+def dist_url(a,ask=True):
+    """Alamat login distributor akun ini; ditanyakan sekali bila belum diketahui."""
+    name=D.of(a);url=D.url_for(name)
+    if url or not ask:return url
+    url=simpledialog.askstring('Alamat '+name,f'Alamat situs {name} untuk login (contoh: https://...):',parent=root)
+    url=(url or '').strip()
+    if not url:return ''
+    if not re.match(r'https?://',url,re.I):url='https://'+url
+    try:D.set_url(name,url)
+    except OSError:pass
+    return url
+
+def open_account(a, target_url=None):
     """Launch the selected account's separate Chrome profile at target_url."""
+    if target_url is None:
+        target_url=dist_url(a)
+        if not target_url:return False
     chrome=chrome_path()
     if not chrome:
         messagebox.showerror('Chrome tidak ditemukan','Instal Google Chrome terlebih dahulu.',parent=root)
@@ -388,18 +417,27 @@ def open_soundon_page(a, target_url, page_title):
     threading.Thread(target=worker,daemon=True).start()
 
 def open_streams(a):
+    if not is_soundon(a):return open_account(a)
     open_soundon_page(a, STREAMS_URL, 'Analytics / Streams')
 
 def open_balance(a):
+    if not is_soundon(a):return open_account(a)
     open_soundon_page(a, ROYALTY_URL, 'Saldo / Penghasilan Saya')
 
+def soundon_only(a,what):
+    """True (dan beri tahu) bila fitur otomatis diminta untuk akun distributor lain."""
+    if is_soundon(a):return False
+    messagebox.showinfo(what,f'{what} otomatis baru tersedia untuk SoundOn.\n\n'
+                        f'Untuk akun {D.of(a)}, buka situsnya lewat tombol Buka lalu isi angkanya lewat Data.',parent=root)
+    return True
+
 def add_account():
-    nid=max((int(a['id']) for a in accounts),default=0)+1
+    nid=max((int(a['id']) for a in ALL_ACCOUNTS),default=0)+1
     name=simpledialog.askstring('Tambah akun','Nama akun:',initialvalue=f'Akun {nid}',parent=root)
     if name is None:return
     category=choose_category('Kategori akun baru')
     if category is None:return
-    accounts.append({'id':nid,'name':name.strip() or f'Akun {nid}','category':category,'phone_count':0,'artist_count':0,'song_count':0,'records':[],'balance':0,'balance_updated':'','currency':'IDR'})
+    ALL_ACCOUNTS.append({'id':nid,'name':name.strip() or f'Akun {nid}','category':category,'phone_count':0,'artist_count':0,'song_count':0,'records':[],'balance':0,'balance_updated':'','currency':'IDR','distributor':ACTIVE_DIST[0]})
     persist(); refresh()
 
 def choose_category(title, initial='Indonesia'):
@@ -587,14 +625,14 @@ def delete_accounts(targets):
     if len(targets)>12:names+=f'\n…dan {len(targets)-12} akun lainnya'
     title='Hapus akun' if len(targets)==1 else f'Hapus {len(targets)} akun'
     if not messagebox.askyesno(title,f'{names}\n\nAkun di atas, data lokalnya, dan profil Chrome-nya akan dihapus permanen. '
-                               'Data di SoundOn tidak terpengaruh.\n\nLanjutkan?',icon='warning',parent=root):return
+                               f'Data di {D.of(targets[0])} tidak terpengaruh.\n\nLanjutkan?',icon='warning',parent=root):return
     failed=[]
     for a in targets:
         try:
             if os.path.exists(profile(a)):shutil.rmtree(profile(a))
         except OSError:
             failed.append(a);continue
-        accounts.remove(a);_chrome_status.pop(str(a['id']),None)
+        ALL_ACCOUNTS.remove(a);_chrome_status.pop(str(a['id']),None)
     persist()
     try:account_table.clear_selection()
     except NameError:pass
@@ -728,11 +766,14 @@ def ask_month_and_sync():
 def start_sync(auto=False,periods=None,only_ids=None,plat=None):
     """Baca Streams & Pendengar semua akun dari Analytics SoundOn (di latar belakang).
     only_ids: hanya akun ini (Ulangi yang belum berhasil), tanpa konfirmasi."""
+    if only_ids is not None and len(only_ids)==1:
+        one=next((a for a in ALL_ACCOUNTS if str(a['id'])==str(only_ids[0])),None)
+        if one is not None and not is_soundon(one):return edit(one)
     if _sync_state['running']:
         if not auto:messagebox.showinfo('Sinkron berjalan','Sinkron sedang berjalan: '+_sync_state['text'],parent=root)
         return
-    if not accounts:
-        if not auto:messagebox.showinfo('Belum ada akun','Tambahkan akun terlebih dahulu.',parent=root)
+    if not soundon_list:
+        if not auto:messagebox.showinfo('Belum ada akun SoundOn','Sinkron otomatis hanya untuk akun SoundOn. Tambahkan akun SoundOn terlebih dahulu.',parent=root)
         return
     if periods is None and auto:periods=daily_periods()
     if periods is None:
@@ -747,10 +788,10 @@ def start_sync(auto=False,periods=None,only_ids=None,plat=None):
         note=f'\n\nPlatform {plat} belum didukung sinkron otomatis; yang dibaca: Semua Platform.'
         plat='Semua Platform'
     cfg=sync_settings()
-    targets=list(accounts)
+    targets=list(soundon_list)
     if only_ids is not None:
         wanted={str(x) for x in only_ids}
-        targets=[a for a in accounts if str(a['id']) in wanted]
+        targets=[a for a in soundon_list if str(a['id']) in wanted]
         if not targets:
             messagebox.showinfo('Tidak ada akun','Akun yang perlu diulang sudah tidak ada di daftar.',parent=root);return
     if not auto and only_ids is None:
@@ -760,27 +801,27 @@ def start_sync(auto=False,periods=None,only_ids=None,plat=None):
         if cfg['workers']>1:extra+=f'\n{cfg["workers"]} Chrome dibaca bersamaan.'
         what='Streams & Pendengar'+(', Saldo' if cfg['balance'] else '')+(', Asal Streams per artis' if cfg['regions'] else '')+(', Riwayat Transaksi' if cfg['transactions'] else '')
         ptxt=', '.join(f'{p[0]} s.d. {p[1]}' for p in periods)
-        if not messagebox.askyesno('Sinkron semua akun',f'Baca {what} untuk {len(targets)} akun\nPeriode: {ptxt} · {plat}\n\n{extra}\n'
+        if not messagebox.askyesno('Sinkron semua akun',f'Baca {what} untuk {len(targets)} akun SoundOn\nPeriode: {ptxt} · {plat}\n\n{extra}\n'
                                    f'Perkiraan waktu ± {minutes} menit. Aplikasi tetap bisa dipakai.{note}\n\nMulai sekarang?',parent=root):return
     _sync_state.update(running=True,stop=False,periods=list(periods),plat=plat)
     _set_sync_status(f'Sinkron dimulai · {len(targets)} akun'+(' (ulang)' if only_ids is not None else ''))
     busy=_upload_busy_accounts()
     def apply_balance(a,amount,currency):
-        if a in accounts:
+        if a in ALL_ACCOUNTS:
             a['balance']=amount;a['currency']=currency;a['balance_updated']=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             persist()
             if active_page=='Dashboard':refresh()
     def apply_transactions(a,rows):
-        if a in accounts:
+        if a in ALL_ACCOUNTS:
             a['transactions']=TX.merge(a.get('transactions'),rows);persist()
     def apply_region(a,row):
-        if a in accounts:
+        if a in ALL_ACCOUNTS:
             existing=a.setdefault('region_records',[])
             existing[:]=[old for old in existing if not (str(old.get('artist_id'))==str(row['artist_id']) and old.get('start')==row['start']
                          and old.get('end')==row['end'] and old.get('platform')==row['platform'])]
             existing.append(row);persist()
     def apply_result(a,record):
-        if a in accounts:
+        if a in ALL_ACCOUNTS:
             upsert_record(a,record);persist()
             # Hanya Dashboard yang diperbarui langsung; halaman lain ikut saat dibuka berikutnya.
             if active_page=='Dashboard':refresh()
@@ -876,7 +917,7 @@ def _pending_retry():
     ids={str(x) for x in data.get('ids',[])}
     try:periods=[(parse_date(s),parse_date(e)) for s,e in data.get('periods',[])]
     except (TypeError,ValueError):periods=[]
-    return [a for a in accounts if str(a['id']) in ids],periods,data.get('platform') or 'Semua Platform'
+    return [a for a in soundon_list if str(a['id']) in ids],periods,data.get('platform') or 'Semua Platform'
 
 def retry_failed_sync():
     """Sinkron ulang hanya akun yang belum berhasil pada sinkron terakhir (periode yang sama)."""
@@ -928,7 +969,7 @@ def _sync_scheduler():
     """Sekali sehari pada jam yang dipilih (atau saat aplikasi dibuka setelah jam itu)."""
     try:
         cfg=sync_settings();now=datetime.now()
-        if cfg['enabled'] and not _sync_state['running'] and accounts and now.hour>=cfg['hour'] and cfg['last_date']!=date.today().isoformat():
+        if cfg['enabled'] and not _sync_state['running'] and soundon_list and now.hour>=cfg['hour'] and cfg['last_date']!=date.today().isoformat():
             start_sync(auto=True)
     finally:
         root.after(60000,_sync_scheduler)
@@ -958,6 +999,7 @@ def _quick_pending(sources=('folder','cepat')):
 
 def quick_upload(a):
     """Tombol Unggah di baris akun: pilih file lagu -> langsung diunggah ke akun ini."""
+    if soundon_only(a,'Unggah lagu'):return
     import upload_quick
     def go():
         artist=upload_quick.choose_artist(root,a)
@@ -1128,6 +1170,7 @@ REGION_SVG_JS = r"""() => {
 }"""
 
 def read_regions(a):
+    if soundon_only(a,'Baca Asal Streams'):return
     period=check_range()
     if not period:return
     if not messagebox.askyesno('Periksa filter Artist Insights',
@@ -1274,6 +1317,7 @@ def visible_available_balance(page):
 
 
 def read_visible(a,kind):
+    if not is_soundon(a):return edit(a)
     """Read only the currently open, already-authenticated SoundOn page via local CDP."""
     period=check_range() if kind!='balance' else None
     if kind!='balance' and not period:return
@@ -1351,8 +1395,9 @@ def edit(a):
     period=check_range()
     if not period:return
     start,end=period; plat=platform_var.get(); old=latest(a,start,end,plat)
-    w=tk.Toplevel(root);w.title('Data SoundOn — '+a['name']);w.geometry('510x600');w.configure(bg=PANEL);w.transient(root);w.grab_set()
-    label(w,'Input data dari SoundOn',15,bold=True).pack(anchor='w',padx=24,pady=(22,5))
+    dname=D.of(a);manual_income=not is_soundon(a)
+    w=tk.Toplevel(root);w.title(f'Data {dname} — '+a['name']);w.geometry('510x'+('720' if manual_income else '600'));w.configure(bg=PANEL);w.transient(root);w.grab_set()
+    label(w,f'Input data dari {dname}',15,bold=True).pack(anchor='w',padx=24,pady=(22,5))
     label(w,f'{start} s.d. {end} · {plat}',10,DIM).pack(anchor='w',padx=24,pady=(0,8))
     label(w,'Angka periode harus sesuai filter. Saldo adalah saldo saat ini.',9,DIM,wraplength=450,justify='left').pack(anchor='w',padx=24,pady=(0,14))
     fields={}
@@ -1365,6 +1410,15 @@ def edit(a):
     label(currency_row,'Mata uang saldo',10,DIM).pack(anchor='w')
     currency_var=tk.StringVar(value=a.get('currency','IDR'))
     ttk.Combobox(currency_row,textvariable=currency_var,values=['IDR','USD'],state='readonly',width=15,style='Dark.TCombobox').pack(anchor='w',pady=4)
+    if manual_income:
+        # Pendapatan bulanan manual: disimpan sebagai transaksi masuk agar rekap Penghasilan ikut terisi.
+        inc_row=tk.Frame(w,bg=PANEL);inc_row.pack(fill='x',padx=24,pady=5)
+        month_key=f'{end.year:04d}-{end.month:02d}'
+        prev=next((t for t in a.get('transactions',[]) if t.get('remark')=='MANUAL' and str(t.get('date',''))[:7]==month_key),None)
+        label(inc_row,f'Pendapatan bulan {BULAN[end.month-1]} {end.year}',10,DIM).pack(anchor='w')
+        label(inc_row,'Dalam mata uang saldo. Kosongkan bila belum ada. Muncul di rekap Penghasilan.',8,MUTED,wraplength=450,justify='left').pack(anchor='w')
+        income_var=tk.StringVar(value=format_amount(prev['amount'],prev.get('currency','IDR')) if prev else '')
+        tk.Entry(inc_row,textvariable=income_var,bg=CARD,fg=WHITE,insertbackground=WHITE,relief='flat',font=(FONT,11)).pack(fill='x',ipady=8,pady=(5,0))
     label(w,'Jumlah HP, artis & lagu diatur lewat ⋯ > Atur jumlah HP, artis & lagu.',9,MUTED).pack(anchor='w',padx=24,pady=(6,0))
     def save_data():
         try:
@@ -1376,6 +1430,16 @@ def edit(a):
         now=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         upsert_record(a,{'start':str(start),'end':str(end),'platform':plat,'streams':values['streams'],'listeners':values['listeners'],'updated':now,'source':'input manual'})
         balance_changed=abs(values['balance']-float(a.get('balance') or 0))>0.004 or currency_var.get()!=a.get('currency','IDR')
+        if manual_income:
+            raw=income_var.get().strip()
+            try:income=parse_amount(raw,currency_var.get()) if raw else None
+            except ValueError:
+                messagebox.showerror('Angka tidak valid','Pendapatan bulan ini harus angka positif.',parent=w);return
+            tx=[t for t in a.get('transactions',[]) if not (t.get('remark')=='MANUAL' and str(t.get('date',''))[:7]==month_key)]
+            if income:
+                tx.append({'date':month_key+'-28 00:00','kind':'in','amount':income,'currency':currency_var.get(),'balance':values['balance'],
+                           'type':'Input manual','status':'Berhasil','remark':'MANUAL'})
+            a['transactions']=sorted(tx,key=lambda t:str(t.get('date','')),reverse=True)
         a['balance']=values['balance'];a['currency']=currency_var.get()
         if balance_changed or not a.get('balance_updated'):a['balance_updated']=now
         persist();w.destroy();refresh()
@@ -1394,7 +1458,7 @@ def poll_chrome_status():
     global _status_busy
     if _status_busy:return
     _status_busy=True
-    snapshot=[(str(a['id']),a) for a in accounts]
+    snapshot=[(str(a['id']),a) for a in ALL_ACCOUNTS]
     def worker():
         result={key:debugger_ready(a) for key,a in snapshot}
         def done():
@@ -1497,15 +1561,32 @@ def set_theme(mode):
     if messagebox.askyesno('Ganti tampilan',('Mode terang' if mode=='light' else 'Mode gelap')+' dipilih.\n\nBuka ulang aplikasi sekarang untuk menerapkannya?',parent=root):
         restart_app()
 
+def move_distributor(a):
+    """Pindahkan akun ke distributor lain (profil Chrome & data tetap)."""
+    w=tk.Toplevel(root);w.title('Pindahkan distributor');w.configure(bg=PANEL);w.transient(root);w.grab_set();w.resizable(False,False)
+    label(w,'Pindahkan '+a['name'],13,bold=True).pack(anchor='w',padx=20,pady=(18,4))
+    label(w,'Sekarang: '+D.of(a)+'. Data dan profil Chrome akun tetap; hanya halaman distributornya yang berganti.',9,DIM,wraplength=360,justify='left').pack(anchor='w',padx=20)
+    v=tk.StringVar(value=D.of(a))
+    ttk.Combobox(w,textvariable=v,values=D.names(),state='readonly',style='Dark.TCombobox').pack(fill='x',padx=20,pady=12,ipady=4)
+    def save():
+        if v.get()==D.of(a):w.destroy();return
+        a['distributor']=v.get();persist();w.destroy();refresh()
+        if active_page!='Dashboard':render_active_page()
+    acts=tk.Frame(w,bg=PANEL);acts.pack(fill='x',padx=20,pady=(0,16))
+    button(acts,'Pindahkan',save,True).pack(side='right')
+    button(acts,'Batal',w.destroy,variant='ghost').pack(side='right',padx=6)
+
 def show_actions(a):
     w=tk.Toplevel(root);w.title(a['name']);w.configure(bg=PANEL);w.transient(root);w.resizable(False,False)
     head=tk.Frame(w,bg=PANEL);head.pack(fill='x',padx=20,pady=(20,14))
     avatar(head,a['name'],PURPLE,40,PANEL).pack(side='left',padx=(0,12))
     ht=tk.Frame(head,bg=PANEL);ht.pack(side='left')
     label(ht,a['name'],13,bold=True).pack(anchor='w')
-    label(ht,'Akun #'+str(a['id'])+'  ·  '+account_category(a),9,DIM).pack(anchor='w')
-    items=[('Unggah lagu ke akun ini','music',lambda:quick_upload(a),'primary'),
-           ('Ubah nama','edit',lambda:rename(a),'secondary'),
+    label(ht,D.of(a)+'  ·  Akun #'+str(a['id'])+'  ·  '+account_category(a),9,DIM).pack(anchor='w')
+    first=[('Unggah lagu ke akun ini','music',lambda:quick_upload(a),'primary')] if is_soundon(a) else \
+          [('Isi data (Streams, Saldo, Pendapatan)','edit',lambda:edit(a),'primary'),('Buka situs '+D.of(a),'external',lambda:open_account(a),'secondary')]
+    items=first+[('Ubah nama','edit',lambda:rename(a),'secondary'),
+           ('Pindahkan ke distributor lain','music',lambda:move_distributor(a),'secondary'),
            ('Atur jumlah HP, artis & lagu','grid',lambda:edit_account_counts(a),'secondary'),
            ('Pindahkan kategori / negara','tag',lambda:change_category(a),'secondary'),
            ('Hapus akun & profil','trash',lambda:delete(a),'danger')]
@@ -1628,7 +1709,7 @@ def _transfer_key(password, salt):
     return Fernet(base64.urlsafe_b64encode(kdf.derive(password.encode('utf-8'))))
 
 def export_transfer_package():
-    if not accounts:
+    if not ALL_ACCOUNTS:
         messagebox.showinfo('Transfer Akun','Belum ada akun untuk diekspor.',parent=root);return
     password=simpledialog.askstring('Password Transfer','Buat password transfer (minimal 8 karakter):',show='*',parent=root)
     if password is None:return
@@ -1641,7 +1722,7 @@ def export_transfer_package():
     if not path:return
     try:
         salt=os.urandom(16);fernet=_transfer_key(password,salt)
-        payload={'format':'soundon-transfer-v1','created':datetime.now().isoformat(timespec='seconds'),'accounts':accounts,'categories':categories,'phone_inventory':phone_inventory,'owners':owners}
+        payload={'format':'soundon-transfer-v1','created':datetime.now().isoformat(timespec='seconds'),'accounts':ALL_ACCOUNTS,'categories':categories,'phone_inventory':phone_inventory,'owners':owners}
         encrypted=fernet.encrypt(json.dumps(payload,ensure_ascii=False).encode('utf-8'))
         wrapper={'format':'soundon-transfer-encrypted-v1','salt':base64.b64encode(salt).decode('ascii'),'data':encrypted.decode('ascii')}
         with open(path,'w',encoding='utf-8') as f:json.dump(wrapper,f,ensure_ascii=False)
@@ -1685,14 +1766,15 @@ def import_transfer_package():
             if item_id is None or item_id in taken or item_id in {k['id'] for k in kept}:
                 item_id=next_id;next_id+=1
             item['id']=item_id;kept.append(item)
-        accounts.clear();accounts.extend(kept)
+        ALL_ACCOUNTS.clear();ALL_ACCOUNTS.extend(kept)
     else:
         # Merge as new local accounts; assign fresh IDs so profiles never collide.
-        next_id=max([int(a.get('id',0)) for a in accounts]+list(used_profile_ids())+[0])+1
+        next_id=max([int(a.get('id',0)) for a in ALL_ACCOUNTS]+list(used_profile_ids())+[0])+1
         for src in incoming:
             item=dict(src);item['id']=next_id;next_id+=1
             # Browser session/profile is intentionally recreated locally.
-            accounts.append(item)
+            ALL_ACCOUNTS.append(item)
+    for item in ALL_ACCOUNTS:item.setdefault('distributor',D.DEFAULT)
     _chrome_status.clear()
     incoming_owners=payload.get('owners',[])
     if isinstance(incoming_owners,list):
@@ -1719,7 +1801,7 @@ def backup_account_data():
     if not path:return
     try:
         with open(path,'w',encoding='utf-8') as f:
-            json.dump({'accounts':accounts,'categories':categories,'phone_inventory':phone_inventory,'owners':owners},f,ensure_ascii=False,indent=2)
+            json.dump({'accounts':ALL_ACCOUNTS,'categories':categories,'phone_inventory':phone_inventory,'owners':owners},f,ensure_ascii=False,indent=2)
         messagebox.showinfo('Backup berhasil','Data akun, kategori, dan inventaris HP berhasil dicadangkan. Profil Chrome tidak termasuk.',parent=root)
     except OSError as ex:messagebox.showerror('Backup gagal',str(ex),parent=root)
 
@@ -1880,7 +1962,7 @@ def render_owner_card(parent,group,index):
                      GREEN if has_balance else DIM,bold=has_balance,anchor='e')
         income.grid(row=0,column=1,sticky='e',padx=(4,8),pady=8)
         actions=tk.Frame(row,bg=CARD);actions.grid(row=0,column=2,sticky='e',padx=(0,7),pady=6)
-        RoundButton(actions,'Sinkron',lambda a=a:read_visible(a,'balance'),icon='sync',bg_color=CARD,font_size=9,padx=8,height=28).pack(side='left',padx=2)
+        RoundButton(actions,'Sinkron' if is_soundon(a) else 'Data',lambda a=a:read_visible(a,'balance'),icon='sync' if is_soundon(a) else 'edit',bg_color=CARD,font_size=9,padx=8,height=28).pack(side='left',padx=2)
         RoundButton(actions,'Buka',lambda a=a:open_balance(a),icon='external',bg_color=CARD,font_size=9,padx=8,height=28).pack(side='left',padx=2)
         RoundButton(actions,'',lambda a=a,artist=artist:artist_options(a,artist),icon='more',bg_color=CARD,height=28,padx=6).pack(side='left',padx=2)
     return outer
@@ -1918,7 +2000,70 @@ def render_active_page():
     try:start=parse_date(start_var.get());end=parse_date(end_var.get())
     except ValueError:start=end=date.today()
     platform=platform_var.get()
-    if active_page=='Daftar Akun':
+    if active_page=='Semua Distributor':
+        stats={n:distributor_stats(n,start,end) for n in D.names()}
+        used=[n for n in D.names() if stats[n]['count']]
+        month=_last_full_month();y,m=map(int,month.split('-'))
+        tot=lambda key:sum(stats[n][key] for n in used)
+        cur_sum=lambda field,c:sum(stats[n][field].get(c,0) for n in used)
+        top=fixed_area()
+        stat_row(top,[('Distributor dipakai','grid',str(len(used)),f'dari {len(D.names())} distributor terdaftar'),
+                      ('Total akun','users',number(tot('count')),f'{number(tot("phones"))} HP dipakai'),
+                      ('Streams periode ini','wave',number(tot('streams')),f'{tot("read")} akun terbaca · {start.strftime("%d/%m")}–{end.strftime("%d/%m")}'),
+                      ('Saldo tersedia','wallet',money(cur_sum('saldo','IDR'),'IDR'),'dan '+money(cur_sum('saldo','USD'),'USD')+' (tidak dijumlahkan)'),
+                      ('Pendapatan '+BULAN_PENDEK[m-1]+' '+str(y),'chart',money(cur_sum('income','IDR'),'IDR'),
+                       'dan '+money(cur_sum('income','USD'),'USD')+' · semua distributor')])
+        # ---- Kartu per distributor
+        sec=page_section(page_body,'Distributor','Klik Buka untuk melihat Dashboard, Daftar Akun, Analytics, dan Penghasilan distributor itu. '
+                         'SoundOn tersinkron otomatis; distributor lain diisi lewat tombol Data.','grid',PURPLE)
+        grid=tk.Frame(sec,bg=PANEL);grid.pack(fill='x')
+        cols=3
+        for c in range(cols):grid.grid_columnconfigure(c,weight=1,uniform='dist')
+        shown=used if used else [D.DEFAULT]
+        for i,n in enumerate(shown+['＋']):
+            shell=UI.RoundedPanel(grid,outer=PANEL,color=CARD,radius=14);shell.grid(row=i//cols,column=i%cols,sticky='nsew',padx=(0 if i%cols==0 else 6,0),pady=(0,8))
+            inner=tk.Frame(shell,bg=CARD);inner.pack(fill='both',expand=True,padx=16,pady=14)
+            if n=='＋':
+                label(inner,'Tambah distributor lain',11,bold=True).pack(anchor='w')
+                label(inner,'Pilih dari daftar (DistroKid, TuneCore, CD Baby, …) atau tambahkan nama sendiri.',9,DIM,wraplength=300,justify='left').pack(anchor='w',pady=(4,10))
+                others=[x for x in D.names() if x not in shown]
+                acts=tk.Frame(inner,bg=CARD);acts.pack(fill='x')
+                menu_button(acts,'Pilih distributor',[(x,lambda x=x:set_distributor(x)) for x in others]+[None,('Distributor lain (ketik nama)…',add_distributor)],
+                            icon='plus',height=32,font_size=9).pack(side='left')
+                continue
+            st=stats[n];auto=D.is_auto(n)
+            head_r=tk.Frame(inner,bg=CARD);head_r.pack(fill='x')
+            avatar(head_r,n[:2].upper(),ACCENTS[i%len(ACCENTS)],34,CARD).pack(side='left',padx=(0,10))
+            label(head_r,n,13,bold=True).pack(side='left')
+            pill(head_r,'Sinkron otomatis' if auto else 'Input manual',GREEN if auto else AMBER,CARD,8).pack(side='right')
+            grid2=tk.Frame(inner,bg=CARD);grid2.pack(fill='x',pady=(12,10))
+            for j,(cap,val) in enumerate([('Akun',number(st['count'])),('Streams',number(st['streams'])),
+                                          ('Saldo',money_by_currency(st['saldo'])),('Pendapatan '+BULAN_PENDEK[m-1],money_by_currency(st['income']))]):
+                cell=tk.Frame(grid2,bg=CARD);cell.grid(row=j//2,column=j%2,sticky='w',pady=3)
+                grid2.grid_columnconfigure(j%2,weight=1,uniform='dc')
+                label(cell,cap.upper(),7,MUTED,bold=True).pack(anchor='w')
+                label(cell,val,10 if len(val)<22 else 9,WHITE,bold=True).pack(anchor='w')
+            acts=tk.Frame(inner,bg=CARD);acts.pack(fill='x')
+            button(acts,'Buka dashboard',lambda n=n:set_distributor(n),True,height=30,font_size=9).pack(side='left')
+            button(acts,'Daftar akun',lambda n=n:set_distributor(n,'Daftar Akun'),height=30,font_size=9).pack(side='left',padx=6)
+        # ---- Perbandingan
+        cmp_sec=page_section(page_body,'Perbandingan distributor',f'Streams periode {start} s.d. {end} (Semua Platform) dan pendapatan {BULAN[m-1]} {y}.','chart',BLUE)
+        table=DC.GroupTable(cmp_sec,[('d','DISTRIBUTOR',30,'w'),('akun','AKUN',10,'e'),('streams','STREAMS',18,'e'),
+                                     ('idr','SALDO IDR',20,'e'),('usd','SALDO USD',14,'e'),('inc','PENDAPATAN',22,'e')],actions_width=90)
+        table.pack(fill='x')
+        best=max((stats[n]['streams'] for n in used),default=0) or 1
+        rows=[]
+        for i,n in enumerate(sorted(used,key=lambda n:-stats[n]['streams'])):
+            st=stats[n]
+            rows.append({'kind':'item','name':n,'accent':ACCENTS[i%len(ACCENTS)],
+                'cells':{'d':n,'akun':number(st['count']),'streams':(number(st['streams']),WHITE,True),
+                         'idr':money(st['saldo']['IDR'],'IDR') if st['saldo']['IDR'] else '—',
+                         'usd':money(st['saldo']['USD'],'USD') if st['saldo']['USD'] else '—','inc':money_by_currency(st['income'])},
+                'subs':{'d':'Sinkron otomatis' if D.is_auto(n) else 'Input manual','streams':f'{st["read"]}/{st["count"]} akun terbaca'},
+                'bars':{'streams':st['streams']/best},
+                'actions':[('Buka',lambda n=n:set_distributor(n),True)]})
+        table.set(rows)
+    elif active_page=='Daftar Akun':
         v=get_list_vars();clear_traces(v.values())
         month=v['month'].get()
         q=v['q'].get().strip().casefold()
@@ -1958,7 +2103,7 @@ def render_active_page():
             linked=list(g['accounts'].values()) if g else []
             synced=[a for a in linked if a.get('balance_updated')]
             stat_row(top,[('Artis','music',str(sum(e['artist'] is not None for e in g['entries'])) if g else '0',
-                           f'{len(linked)} akun SoundOn'),
+                           f'{len(linked)} akun {ACTIVE_DIST[0]}'),
                           ('Saldo','wallet',grouped_balance(synced) if synced else '—','dari sinkron terakhir'),
                           ('Pendapatan '+month,'flag',money_by_currency(accounts_month(linked,month,'income')),
                            f'{sum(1 for a in linked if any(x["income"] for x in TX.month_summary(a.get("transactions"),month).values()))} akun berpendapatan'),
@@ -1984,7 +2129,7 @@ def render_active_page():
                                     actions_width=190,empty_text='Belum ada artis. Klik ＋ Artis.')
                 table.pack(fill='x',padx=12,pady=12)
                 unassigned=g['owner']=='Belum ditentukan'
-                rows=[{'kind':'group','title':g['owner'],'sub':f'{len(linked)} akun SoundOn · pendapatan dihitung per akun',
+                rows=[{'kind':'group','title':g['owner'],'sub':f'{len(linked)} akun {ACTIVE_DIST[0]} · pendapatan dihitung per akun',
                        'actions':[] if unassigned else [('＋ Artis',lambda o=g['owner']:add_owner_artist(o),False),
                                                         ('Ubah nama',lambda o=g['owner']:edit_owner_name(o),False),
                                                         ('Hapus',lambda o=g['owner']:delete_owner_name(o),False)]}]
@@ -2001,12 +2146,12 @@ def render_active_page():
                         'subs':{'artis':'' if art else 'nama akun (belum ada artis)','akun':f'{account_category(a)} · #{a["id"]}',
                                 'saldo':short_time(a.get('balance_updated')) if first and a.get('balance_updated') else '',
                                 'inc':('ditarik '+money_by_currency(out_)) if first and out_ else ''},
-                        'actions':[('Sinkron',lambda a=a:start_sync(only_ids=[a['id']]),True),('Buka',lambda a=a:open_balance(a),False),
+                        'actions':[('Sinkron' if is_soundon(a) else 'Data',lambda a=a:start_sync(only_ids=[a['id']]),True),('Buka',lambda a=a:open_balance(a),False),
                                    ('⋯',lambda a=a,art=art:artist_options(a,art),False)]})
                 table.set(rows)
         else:
             synced=[a for a in accounts if a.get('balance_updated')]
-            stat_row(top,[('Akun SoundOn','globe',str(len(accounts)),f'{sum(1 for a in accounts if _chrome_status.get(str(a["id"]),False))} Chrome aktif'),
+            stat_row(top,[('Akun '+ACTIVE_DIST[0],'globe',str(len(accounts)),f'{sum(1 for a in accounts if _chrome_status.get(str(a["id"]),False))} Chrome aktif'),
                           ('Total HP','phone',number(sum(int(a.get('phone_count',0) or 0) for a in accounts)),
                            f'{number(sum(int(a.get("song_count",0) or 0) for a in accounts))} lagu'),
                           ('Saldo akun','wallet',grouped_balance(synced) if synced else '—','dari sinkron terakhir'),
@@ -2200,7 +2345,7 @@ def render_active_page():
                         'subs':{'akun':f'{account_category(a)} · #{a["id"]}',
                                 'saldo':short_time(a.get('balance_updated')) if known(a) else '',
                                 'inc':('ditarik '+money(o_,c)) if o_ else ('—' if a.get('transactions') else 'belum ada riwayat')},
-                        'actions':[('Buka',lambda a=a:open_balance(a),False),('Sinkron',lambda a=a:start_sync(only_ids=[a['id']]),True)]})
+                        'actions':[('Buka',lambda a=a:open_balance(a),False),('Sinkron' if is_soundon(a) else 'Data',lambda a=a:start_sync(only_ids=[a['id']]),True)]})
                 t.set(rows)
         for key in ('show','sort','q'):v[key].trace_add('write',update_tables)
         v['month'].trace_add('write',lambda *_:root.after_idle(render_active_page))
@@ -2210,10 +2355,10 @@ def render_active_page():
         assigned=assigned_phone_count()
         others={k:phone_inventory[k] for k in ('tersedia','service','rusak','tidak_terpakai')}
         total=assigned+sum(others.values())
-        with_hp=sum(1 for a in accounts if int(a.get('phone_count',0) or 0)>0)
+        with_hp=sum(1 for a in ALL_ACCOUNTS if int(a.get('phone_count',0) or 0)>0)
         # ---- Ringkasan tetap
         top=fixed_area()
-        stat_row(top,[('Dipakai akun','phone',number(assigned),f'di {with_hp} dari {len(accounts)} akun'),
+        stat_row(top,[('Dipakai akun','phone',number(assigned),f'di {with_hp} dari {len(ALL_ACCOUNTS)} akun'),
                       ('Tersedia','check',number(others['tersedia']),'siap dipakai'),
                       ('Service','wrench',number(others['service']),'sedang diperbaiki'),
                       ('Rusak','alert',number(others['rusak']),'tidak bisa dipakai'),
@@ -2266,12 +2411,12 @@ def render_active_page():
         button(foot,'✓  Simpan Inventaris',save_inventory_form,True).pack(side='left')
         label(foot,'Disimpan di '+INVENTORY_FILE,8,MUTED).pack(side='left',padx=14)
         # ---- HP per akun
-        per=page_section(page_body,'HP per akun','Jumlah HP yang dipakai setiap akun SoundOn. Klik Atur untuk mengubah jumlah HP, artis, dan lagu.','phone',BLUE)
+        per=page_section(page_body,'HP per akun','Jumlah HP yang dipakai setiap akun (semua distributor). Klik Atur untuk mengubah jumlah HP, artis, dan lagu.','phone',BLUE)
         table=DC.GroupTable(per,[('akun','AKUN',46,'w'),('hp','HP',18,'e'),('artis','ARTIS',18,'e'),('lagu','LAGU',18,'e')],actions_width=90)
         table.pack(fill='x')
         rows=[]
-        for cat in categories+sorted({account_category(a) for a in accounts}-set(categories)):
-            members=sorted([a for a in accounts if account_category(a)==cat],key=lambda a:-int(a.get('phone_count',0) or 0))
+        for cat in categories+sorted({account_category(a) for a in ALL_ACCOUNTS}-set(categories)):
+            members=sorted([a for a in ALL_ACCOUNTS if account_category(a)==cat],key=lambda a:-int(a.get('phone_count',0) or 0))
             if not members:continue
             hp_sum=sum(int(a.get('phone_count',0) or 0) for a in members)
             rows.append({'kind':'group','title':cat,'sub':f'{len(members)} akun','right':f'{number(hp_sum)} HP'})
@@ -2280,12 +2425,32 @@ def render_active_page():
                 rows.append({'kind':'item','name':a['name'],'accent':ACCENTS[n%len(ACCENTS)],
                     'cells':{'akun':a['name'],'hp':(number(hp),WHITE if hp else MUTED,bool(hp)),'artis':number(a.get('artist_count',0)),
                              'lagu':number(a.get('song_count',0))},
-                    'subs':{'akun':f'#{a["id"]}'+(' · '+a['count_note'][:60] if a.get('count_note') else '')},
+                    'subs':{'akun':f'{D.of(a)} · #{a["id"]}'+(' · '+a['count_note'][:60] if a.get('count_note') else '')},
                     'actions':[('Atur',lambda a=a:edit_account_counts(a),True)]})
         table.set(rows)
     elif active_page=='Pengaturan':
         import updater as _upd
         _cfg=_upd.load_config(_APP_DIR)
+        # Distributor
+        dsec=page_section(page_body,'Distributor','Alamat situs tiap distributor dipakai tombol Buka akun. SoundOn tersinkron otomatis; '
+                          'distributor lain diisi lewat Data. Belum ada distributor yang menyediakan API publik untuk artis.','music',PURPLE)
+        drow=tk.Frame(dsec,bg=PANEL);drow.pack(fill='x')
+        d_var=tk.StringVar(value=ACTIVE_DIST[0]);u_var=tk.StringVar(value=D.url_for(ACTIVE_DIST[0]))
+        dcb=ttk.Combobox(drow,textvariable=d_var,values=D.names(),state='readonly',width=20,style='Dark.TCombobox');dcb.pack(side='left',ipady=3)
+        dcb.bind('<<ComboboxSelected>>',lambda e:u_var.set(D.url_for(d_var.get())))
+        tk.Entry(drow,textvariable=u_var,bg=CARD,fg=WHITE,insertbackground=WHITE,relief='flat',font=(FONT,10)).pack(side='left',fill='x',expand=True,padx=8,ipady=6)
+        def save_url():
+            url=u_var.get().strip()
+            if url and not re.match(r'https?://',url,re.I):url='https://'+url;u_var.set(url)
+            try:D.set_url(d_var.get(),url)
+            except OSError as ex:messagebox.showerror('Gagal menyimpan',str(ex),parent=root);return
+            messagebox.showinfo('Tersimpan','Alamat '+d_var.get()+' disimpan.',parent=root)
+        button(drow,'Simpan alamat',save_url,True,font_size=9,height=30).pack(side='left')
+        button(drow,'＋  Tambah distributor',add_distributor,font_size=9,height=30).pack(side='left',padx=(6,0))
+        chips=tk.Frame(dsec,bg=PANEL);chips.pack(fill='x',pady=(10,0))
+        counts={n:sum(1 for a in ALL_ACCOUNTS if D.of(a)==n) for n in D.names()}
+        for n in [n for n in D.names() if counts[n]]:
+            pill(chips,f'{n}  ·  {counts[n]} akun',GREEN if D.is_auto(n) else AMBER,PANEL,9).pack(side='left',padx=(0,6),pady=2)
         # Pembaruan
         upd=page_section(page_body,'Pembaruan Aplikasi','Versi baru dipasang otomatis dari GitHub saat aplikasi dibuka, dan diperiksa tiap 20 menit selama aplikasi terbuka.','cloud',PURPLE)
         info_row=tk.Frame(upd,bg=PANEL);info_row.pack(fill='x')
@@ -2316,7 +2481,7 @@ def render_active_page():
                 w.bind('<ButtonRelease-1>',lambda e,m=mode:set_theme(m))
         # Sinkron otomatis
         cfg=sync_settings()
-        syn=page_section(page_body,'Sinkron Otomatis','Membaca Streams, Pendengar, Saldo, dan Asal Streams semua akun dari SoundOn sekali sehari. '
+        syn=page_section(page_body,'Sinkron Otomatis SoundOn','Membaca Streams, Pendengar, Saldo, dan Asal Streams semua akun dari SoundOn sekali sehari. '
                          'Sinkron harian membaca data bulanan: Bulan ini (dan Bulan lalu pada tanggal 1–3).','sync',GREEN)
         en_var=tk.BooleanVar(value=cfg['enabled']);oc_var=tk.BooleanVar(value=cfg['open_closed']);hr_var=tk.StringVar(value='%02d:00'%cfg['hour'])
         bal_var=tk.BooleanVar(value=cfg['balance']);reg_var=tk.BooleanVar(value=cfg['regions'])
@@ -2377,6 +2542,56 @@ def render_active_page():
             label(r,val,9,WHITE).pack(side='left')
         label(loc,'Backup JSON tidak mencakup profil Chrome. Pembaruan aplikasi tidak menyentuh folder data.',9,DIM).pack(anchor='w',pady=(8,0))
 
+PER_DISTRIBUTOR_PAGES=('Dashboard','Daftar Akun','Analytics','Penghasilan')
+def page_subtitle_text(name):
+    d=ACTIVE_DIST[0]
+    return {'Semua Distributor':'Ringkasan gabungan semua distributor. Klik kartu distributor untuk membuka halamannya.',
+            'Daftar Akun':f'{d}  ·  Kelola pemilik, artis, dan akun {d}.',
+            'Analytics':f'{d}  ·  Bandingkan Streams dan Pendengar berdasarkan negara.'+('' if is_soundon() else ' Asal Streams otomatis baru tersedia untuk SoundOn.'),
+            'Penghasilan':f'{d}  ·  Pantau saldo tersedia dan pendapatan bulanan seluruh akun.',
+            'Inventaris HP':'Pantau HP dipakai akun (semua distributor), tersedia, service, rusak, dan tidak terpakai.',
+            'Pengaturan':'Atur distributor, data, transfer akun, dan pembaruan Dashboard Distributor.'}.get(name,'')
+
+def set_distributor(name,page='Dashboard'):
+    """Buka halaman distributor `name` (Dashboard, Daftar Akun, Analytics, Penghasilan ikut berganti)."""
+    ACTIVE_DIST[0]=name
+    try:D.set_active(name)
+    except OSError:pass
+    _rebuild_views();DATA_VERSION[0]+=1
+    try:account_table.clear_selection()
+    except NameError:pass
+    for k in ('owner',):
+        try:get_list_vars()[k].set('')
+        except Exception:pass
+    update_distributor_chrome();refresh()
+    if page==active_page and page!='Dashboard':render_active_page();page_rendered[page]=_page_key()
+    switch_page(page)
+
+def add_distributor():
+    name=simpledialog.askstring('Tambah distributor','Nama distributor:',parent=root)
+    if name is None:return
+    try:name=D.add(name)
+    except (ValueError,OSError) as ex:
+        messagebox.showerror('Tidak dapat menambah',str(ex),parent=root);return
+    url=simpledialog.askstring('Alamat '+name,f'Alamat situs {name} untuk login (boleh dikosongkan):',parent=root)
+    if url and url.strip():
+        url=url.strip()
+        if not re.match(r'https?://',url,re.I):url='https://'+url
+        D.set_url(name,url)
+    set_distributor(name)
+
+def distributor_stats(name,start,end):
+    members=[a for a in ALL_ACCOUNTS if D.of(a)==name]
+    recs=[latest(a,start,end,'Semua Platform') for a in members]
+    month=_last_full_month()
+    return {'members':members,'count':len(members),
+            'streams':sum(r.get('streams',0) for r in recs if r),'read':sum(1 for r in recs if r),
+            'listeners':sum(r.get('listeners',0) for r in recs if r),
+            'saldo':{c:sum(float(a.get('balance',0) or 0) for a in members if str(a.get('currency') or 'IDR').upper()==c and a.get('balance_updated'))
+                     for c in ('IDR','USD')},
+            'income':accounts_month(members,month,'income'),'month':month,
+            'phones':sum(int(a.get('phone_count',0) or 0) for a in members)}
+
 def switch_page(name):
     global active_page,page_body,page_window
     previous=active_page
@@ -2395,12 +2610,7 @@ def switch_page(name):
         refresh()
         return
     page_title.configure(text=name)
-    page_subtitle.configure(text={
-        'Daftar Akun':'Kelola pemilik, artis, dan akun SoundOn.',
-        'Analytics':'Bandingkan Streams dan Pendengar berdasarkan negara.',
-        'Penghasilan':'Pantau saldo tersedia seluruh akun.',
-        'Inventaris HP':'Pantau HP dipakai akun, tersedia, service, rusak, dan tidak terpakai.',
-        'Pengaturan':'Atur data, transfer akun, dan pembaruan SoundOn Account Manager.'}.get(name,''))
+    page_subtitle.configure(text=page_subtitle_text(name))
     # Sembunyikan Dashboard sepenuhnya (bukan ditimpa) agar tidak ada sisa gambar.
     if dash.winfo_manager():dash.pack_forget()
     if not page_overlay.winfo_manager():page_overlay.pack(fill='both',expand=True)
@@ -2429,16 +2639,11 @@ def switch_page(name):
         page_subtitle.configure(text=page_subtitle.cget('text')+'  ·  Memuat…')
         def first_render(target=name):
             if active_page!=target:return
-            page_subtitle.configure(text={
-                'Daftar Akun':'Kelola pemilik, artis, dan akun SoundOn.',
-                'Analytics':'Bandingkan Streams dan Pendengar berdasarkan negara.',
-                'Penghasilan':'Pantau saldo tersedia seluruh akun.',
-                'Inventaris HP':'Pantau HP dipakai akun, tersedia, service, rusak, dan tidak terpakai.',
-                'Pengaturan':'Atur data, transfer akun, dan pembaruan SoundOn Account Manager.'}.get(target,''))
+            page_subtitle.configure(text=page_subtitle_text(target))
             render_active_page();page_rendered[target]=_page_key()
         root.after_idle(first_render)
 
-root=tk.Tk();root.title('SoundOn — Account Manager Dashboard');root.geometry('1600x910');root.minsize(1280,690);root.configure(bg=BG)
+root=tk.Tk();root.title('Dashboard Distributor');root.geometry('1600x910');root.minsize(1280,690);root.configure(bg=BG)
 style=UI.setup_styles(root)
 root.option_add('*TCombobox.font',(FONT,10))
 sidebar=tk.Frame(root,bg=SIDE,width=232,highlightthickness=0)
@@ -2448,22 +2653,43 @@ brand=tk.Frame(sidebar,bg=SIDE);brand.pack(fill='x',padx=18,pady=(24,26))
 _logo=tk.Canvas(brand,width=40,height=40,bg=SIDE,highlightthickness=0)
 UI.rounded_rect(_logo,0,0,40,40,11,PURPLE);UI.draw_icon(_logo,'music',9,9,22,'#ffffff');_logo.pack(side='left')
 _brand_text=tk.Frame(brand,bg=SIDE);_brand_text.pack(side='left',padx=(11,0))
-label(_brand_text,'SoundOn',15,bold=True).pack(anchor='w')
-label(_brand_text,'Account Manager',9,DIM).pack(anchor='w')
-label(sidebar,'MENU',8,MUTED,bold=True).pack(anchor='w',padx=24,pady=(0,6))
+label(_brand_text,'Dashboard',15,bold=True).pack(anchor='w')
+label(_brand_text,'Distributor Musik',9,DIM).pack(anchor='w')
 nav=tk.Frame(sidebar,bg=SIDE);nav.pack(fill='x',padx=12)
-for title,icon_name in [('Dashboard','home'),('Daftar Akun','users'),('Analytics','chart'),('Penghasilan','wallet'),
-                        ('Inventaris HP','phone'),('Pengaturan','gear')]:
-    control=UI.NavItem(nav,title,icon_name,lambda title=title:switch_page(title))
+def _nav(parent,title,icon_name):
+    control=UI.NavItem(parent,title,icon_name,lambda title=title:switch_page(title))
     control.pack(fill='x',pady=2)
     control.set_active(title=='Dashboard')
     nav_controls[title]=control
+_nav(nav,'Semua Distributor','grid')
+# Pemilih distributor: halaman di bawahnya menampilkan distributor ini.
+_dist_head=tk.Frame(nav,bg=SIDE);_dist_head.pack(fill='x',pady=(14,4))
+label(_dist_head,'DISTRIBUTOR',8,MUTED,bold=True).pack(side='left',padx=(12,0))
+_dist_holder=tk.Frame(nav,bg=SIDE);_dist_holder.pack(fill='x',pady=(0,4))
+def update_distributor_chrome():
+    """Sidebar, judul, dan tombol Dashboard mengikuti distributor aktif."""
+    d=ACTIVE_DIST[0]
+    for w in _dist_holder.winfo_children():w.destroy()
+    items=[(('✓  ' if n==d else '     ')+n,lambda n=n:set_distributor(n,active_page if active_page in PER_DISTRIBUTOR_PAGES else 'Dashboard'))
+           for n in D.names()]
+    menu_button(_dist_holder,short_name(d,18),items+[None,('Tambah distributor…',add_distributor),('Semua distributor',lambda:switch_page('Semua Distributor'))],
+                icon='music',height=34,font_size=10).pack(fill='x',padx=4)
+    root.title('Dashboard Distributor — '+d)
+    try:
+        for w in hero_actions.winfo_children():w.pack_forget()
+        for w in (_hero_soundon if is_soundon() else _hero_manual):w.pack(side='left',padx=(0,8))
+    except NameError:pass
+for title,icon_name in [('Dashboard','home'),('Daftar Akun','users'),('Analytics','chart'),('Penghasilan','wallet')]:
+    _nav(nav,title,icon_name)
+label(nav,'UMUM',8,MUTED,bold=True).pack(anchor='w',padx=12,pady=(14,4))
+for title,icon_name in [('Inventaris HP','phone'),('Pengaturan','gear')]:
+    _nav(nav,title,icon_name)
 def launch_upload_manager():
     from upload_manager import show_upload_manager
     global upload_manager_window
     if 'upload_manager_window' in globals() and upload_manager_window.window.winfo_exists():
         upload_manager_window.window.deiconify();upload_manager_window.window.lift();return
-    upload_manager_window=show_upload_manager(root,accounts,BASE,open_account,port_for,debugger_ready)
+    upload_manager_window=show_upload_manager(root,soundon_list,BASE,open_account,port_for,debugger_ready)
 _foot=tk.Frame(sidebar,bg=SIDE);_foot.pack(side='bottom',fill='x',padx=16,pady=(0,14))
 label(_foot,'Versi '+APP_VERSION,8,MUTED).pack(side='left',padx=(8,0))
 button(sidebar,'＋  Tambah Akun',add_account,True,height=38).pack(side='bottom',fill='x',padx=16,pady=(10,10))
@@ -2494,12 +2720,20 @@ hero_chip=tk.Frame(hero_row,bg=BG);hero_chip.pack(side='left',padx=(12,0),pady=(
 hero_sub=tk.StringVar(value='')
 tk.Label(left_head,textvariable=hero_sub,font=(FONT,9),fg=MUTED,bg=BG).pack(anchor='w',pady=(0,10))
 hero_actions=tk.Frame(left_head,bg=BG);hero_actions.pack(anchor='w')
-menu_button(hero_actions,'Sinkron',[('Sinkron semua akun (periode terpilih)',lambda:start_sync()),('Sinkron per bulan…',ask_month_and_sync),
+_hero_soundon=[menu_button(hero_actions,'Sinkron',[('Sinkron semua akun (periode terpilih)',lambda:start_sync()),('Sinkron per bulan…',ask_month_and_sync),
                             ('Ulangi akun yang belum berhasil',retry_failed_sync),('Hentikan sinkron',stop_sync),None,
                             ('Lihat laporan sinkron',open_sync_log),('Pengaturan sinkron…',lambda:switch_page('Pengaturan'))],
-            icon='sync',variant='primary').pack(side='left',padx=(0,8))
-button(hero_actions,'Unggah lagu',lambda:launch_upload_manager(),icon='music').pack(side='left',padx=(0,8))
-button(hero_actions,'Laporan',open_sync_log,icon='info').pack(side='left')
+            icon='sync',variant='primary'),
+               button(hero_actions,'Unggah lagu',lambda:launch_upload_manager(),icon='music'),
+               button(hero_actions,'Laporan',open_sync_log,icon='info')]
+def _open_dist_site():
+    a={'distributor':ACTIVE_DIST[0]}
+    url=dist_url(a)
+    if url:webbrowser.open(url)
+_hero_manual=[button(hero_actions,'＋  Tambah akun',lambda:add_account(),True),
+              button(hero_actions,'Buka situs distributor',_open_dist_site,icon='external'),
+              button(hero_actions,'Semua distributor',lambda:switch_page('Semua Distributor'),icon='grid')]
+for _w in _hero_soundon:_w.pack(side='left',padx=(0,8))
 right_head=tk.Frame(head,bg=BG);right_head.pack(side='right',anchor='n')
 # Satu periode untuk Dashboard dan Analytics.
 today=date.today();first=today.replace(day=1)
@@ -2521,7 +2755,7 @@ stat_cards={
     'Pendengar':DC.StatCard(cards,'Pendengar','headphones'),
     'Saldo':DC.StatCard(cards,'Saldo tersedia','wallet'),
 }
-for i,card in enumerate(list(stat_cards.values())+[DC.AddCard(cards,'Tambah akun SoundOn baru ke dashboard',lambda:add_account())]):
+for i,card in enumerate(list(stat_cards.values())+[DC.AddCard(cards,'Tambah akun baru ke distributor ini',lambda:add_account())]):
     card.grid(row=0,column=i,sticky='nsew',padx=(0 if i==0 else 6,0))
     cards.grid_columnconfigure(i,weight=1 if i<4 else 0,uniform='cards' if i<4 else '')
 # ---- Tab: Ringkasan (grafik) | Daftar Akun (tabel).
@@ -2608,7 +2842,7 @@ def export_recap_csv(month):
     """Simpan rekap pendapatan satu bulan ke CSV (bisa dibuka di Excel)."""
     import csv
     path=filedialog.asksaveasfilename(title='Ekspor rekap pendapatan',defaultextension='.csv',
-                                      initialfile=f'Rekap_Pendapatan_SoundOn_{month}.csv',filetypes=[('CSV','*.csv')],parent=root)
+                                      initialfile=f'Rekap_Pendapatan_{ACTIVE_DIST[0].replace(" ","_")}_{month}.csv',filetypes=[('CSV','*.csv')],parent=root)
     if not path:return
     try:
         with open(path,'w',newline='',encoding='utf-8-sig') as f:
@@ -2679,7 +2913,7 @@ def update_overview(start,end,platform):
     def total(members,key):return sum((recs[str(a['id'])] or {}).get(key,0) for a in members)
     ind=[a for a in accounts if in_country(a,'Indonesia')];usa=[a for a in accounts if in_country(a,'Amerika Serikat')]
     all_streams=total(accounts,'streams')
-    hero_title.set(f'Total Streams  ·  {start} s.d. {end}')
+    hero_title.set(f'{ACTIVE_DIST[0]}  ·  Total Streams  ·  {start} s.d. {end}')
     hero_value.set(number(all_streams))
     for w in hero_chip.winfo_children():w.destroy()
     series_all=monthly_series(accounts,'streams',platform)
@@ -2713,14 +2947,25 @@ def update_overview(start,end,platform):
     hi=max([float(a.get('balance',0)) for a in ranked] or [1]) or 1
     balance_list.set(money(idr_total,'IDR'),[(a['name'],money(float(a.get('balance',0)),'IDR'),float(a.get('balance',0))/hi,DC.ACCENT if i==0 else UI.mix(PANEL,UI.INK,0.35))
                                              for i,a in enumerate(ranked)],sub=(money(usd_total,'USD')+' dari akun USD') if usd else '')
-    run=sync_results()
+    if not is_soundon():
+        # Distributor tanpa sinkron: aktivitas = input manual terbaru, status = akun yang sudah diisi periode ini.
+        activity.title,status_grid.title='Input data terbaru','Data periode ini'
+        entries=sorted(((r.get('updated',''),a,r) for a in accounts for r in a.get('records',[])),key=lambda x:x[0],reverse=True)[:5]
+        activity.set([('OK',a['name'],f'{number(r.get("streams",0))} streams · {r.get("start","")[5:]}–{r.get("end","")[5:]}',short_time(when))
+                      for when,a,r in entries])
+        filled=sum(1 for a in accounts if recs[str(a['id'])])
+        status_grid.set(f'{filled}/{len(accounts)} terisi',[(a['name'],'OK' if recs[str(a['id'])] else None)
+                                                           for a in sorted(accounts,key=lambda a:int(a['id']))])
+        return
+    activity.title,status_grid.title='Aktivitas sinkron terakhir','Status sinkron akun'
+    ids={str(a['id']) for a in accounts}
+    run=[x for x in sync_results() if x[2] in ids]
     rows=[]
     for when,status,aid,name,note in reversed(run[-5:]):
         short=note.split(' · ')[0] if status=='OK' else note
         rows.append((status,name,short[:40],short_time(when+':00')))
     activity.set(rows)
     by_id={aid:status for _,status,aid,_,_ in run}                      # status terbaru tiap akun
-    ids={str(a['id']) for a in accounts}
     ok=sum(1 for aid,s in by_id.items() if s=='OK' and aid in ids)
     status_grid.set(f'{ok}/{len(accounts)} berhasil' if by_id else 'Belum ada sinkron',
                     [(a['name'],by_id.get(str(a['id']))) for a in sorted(accounts,key=lambda a:int(a['id']))])
@@ -2799,6 +3044,7 @@ def _active_scroll_canvas():
     return account_table.body
 scroller=UI.WheelScroller(root,_active_scroll_canvas)
 root.after(50,_drain_ui_queue)
+update_distributor_chrome()
 refresh()
 # Status Chrome tiap akun diperiksa di latar belakang (localhost saja) setiap 20 detik.
 def _chrome_status_loop():
