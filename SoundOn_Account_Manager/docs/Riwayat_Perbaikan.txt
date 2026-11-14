@@ -336,3 +336,9 @@ Hanya membaca halaman yang tampil; tidak mengubah apa pun di SoundOn.
 3.22.1: Gradien putih pada kartu dan panel grafik.
 - Mode gelap: semua kartu ringkasan dan panel grafik (Dashboard, Analytics, Penghasilan, Daftar Akun, Inventaris HP) kini punya gradien putih lembut di bagian atas yang memudar ke bawah, serta tepi tipis yang berkilau.
 - Panel grafik di halaman Penghasilan dan Daftar Akun kini tampil sebagai kartu (sebelumnya menyatu dengan latar).
+
+
+3.22.2: Status sinkron akun tidak lagi salah setelah Ulangi.
+- "Status sinkron akun" di Dashboard kini memakai status TERBARU setiap akun dari seluruh laporan sinkron. Sebelumnya hanya putaran terakhir yang dibaca, sehingga setelah mengulang 1 akun yang perlu login tertulis 1/71 walau akun lain sudah berhasil sebelumnya.
+- "Aktivitas sinkron terakhir" menampilkan 5 hasil terbaru, termasuk dari putaran ulang.
+- "Ulangi akun yang belum berhasil" memakai aturan yang sama: hanya akun yang status terbarunya belum berhasil yang diulang.

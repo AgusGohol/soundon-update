@@ -47,7 +47,7 @@ import ui_theme as UI
 from date_picker import PeriodButton, MonthButton
 from ui_theme import (bg_of, BG, SIDE, PANEL, CARD, LINE, WHITE, DIM, MUTED, PURPLE, GREEN, RED, BLUE, AMBER,
                       FONT, RoundedPanel, RoundButton, icon_badge, avatar, pill, menu_button, ACCENTS)
-APP_VERSION='3.22.1'
+APP_VERSION='3.22.2'
 CATEGORY_FILE=os.path.join(BASE,'categories.json')
 INVENTORY_FILE=os.path.join(BASE,'phone_inventory.json')
 DEFAULT_CATEGORIES=['Indonesia','Negara Lain','Belum dikategorikan']
@@ -832,22 +832,40 @@ def _finish_sync(summary,error,auto):
                     if len(summary[key])>10:detail+=f'\n…dan {len(summary[key])-10} lainnya'
         _sync_done_dialog(text+detail,[a for a,_ in summary['login']] if summary else [])
 
-def _retry_from_log():
-    """Akun yang belum berhasil pada sinkron terakhir menurut sync_log.txt. Laporan ini ditulis
-    oleh semua versi, jadi juga mencakup sinkron sebelum fitur Ulangi ada. None bila belum ada."""
+SYNC_LINE=re.compile(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}):\d{2}\s+\[(OK|LOGIN|LEWATI|GAGAL)\] (.*) \(#([^)]+)\): (.*)$')
+
+def _sync_log_lines(limit=4_000_000):
+    """Baris laporan sinkron (bagian akhir, maks. 4 MB agar tetap cepat), atau None bila belum ada."""
     try:
-        with open(SYNC_LOG,encoding='utf-8') as f:lines=f.read().splitlines()
+        with open(SYNC_LOG,'rb') as f:
+            f.seek(0,2);size=f.tell();f.seek(max(0,size-limit));data=f.read()
     except OSError:
         return None
+    return data.decode('utf-8','replace').splitlines()
+
+def sync_results():
+    """Semua hasil per akun di laporan, urut waktu: [(waktu, STATUS, id, nama, catatan)]."""
+    out=[]
+    for line in _sync_log_lines() or []:
+        m=SYNC_LINE.match(line)
+        if m:out.append((m.group(1),m.group(2),m.group(4),m.group(3),m.group(5)))
+    return out
+
+def latest_sync_status():
+    """Status TERBARU tiap akun dari seluruh laporan: {id: STATUS}. Putaran ulang yang hanya berisi
+    beberapa akun tidak menghapus hasil akun lain dari putaran sebelumnya."""
+    return {aid:status for _,status,aid,_,_ in sync_results()}
+
+def _retry_from_log():
+    """Akun yang status terbarunya belum berhasil menurut sync_log.txt (ditulis semua versi), dengan
+    periode dan platform sinkron terakhir. None bila belum pernah sinkron."""
+    lines=_sync_log_lines()
+    if lines is None:return None
     start=max((i for i,line in enumerate(lines) if 'Mulai sinkron ' in line),default=None)
     if start is None:return None
     m=re.search(r'Mulai sinkron \d+ akun · (.+) · ([^·]+)$',lines[start])
     periods=re.findall(r'(\d{4}-\d{2}-\d{2}) s\.d\. (\d{4}-\d{2}-\d{2})',m.group(1)) if m else []
-    last={}
-    for line in lines[start+1:]:
-        r=re.search(r'\[(OK|LOGIN|LEWATI|GAGAL)\] .* \(#([^)]+)\): ',line)
-        if r:last[r.group(2)]=r.group(1)     # status terakhir (putaran ulang menimpa putaran pertama)
-    return {'ids':[i for i,st in last.items() if st!='OK'],'periods':periods,
+    return {'ids':[i for i,st in latest_sync_status().items() if st!='OK'],'periods':periods,
             'platform':m.group(2).strip() if m else 'Semua Platform'}
 
 def _pending_retry():
@@ -2655,20 +2673,6 @@ def _change(series):
         return ('%+.0f%%'%pct,GREEN if pct>=0 else RED)
     return ('',None)
 
-def last_sync_run():
-    """Hasil per akun dari sinkron terakhir di sync_log.txt: [(waktu, STATUS, id, nama, catatan)]."""
-    try:
-        with open(SYNC_LOG,encoding='utf-8') as f:lines=f.read().splitlines()
-    except OSError:
-        return []
-    start=max((i for i,line in enumerate(lines) if 'Mulai sinkron ' in line),default=None)
-    if start is None:return []
-    out=[]
-    for line in lines[start+1:]:
-        m=re.match(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}):\d{2}\s+\[(OK|LOGIN|LEWATI|GAGAL)\] (.*) \(#([^)]+)\): (.*)$',line)
-        if m:out.append((m.group(1),m.group(2),m.group(4),m.group(3),m.group(5)))
-    return out
-
 def update_overview(start,end,platform):
     """Kepala, kartu, dan tab Ringkasan. Semua akun dihitung (tidak terpengaruh filter tabel)."""
     recs={str(a['id']):latest(a,start,end,platform) for a in accounts}
@@ -2709,14 +2713,15 @@ def update_overview(start,end,platform):
     hi=max([float(a.get('balance',0)) for a in ranked] or [1]) or 1
     balance_list.set(money(idr_total,'IDR'),[(a['name'],money(float(a.get('balance',0)),'IDR'),float(a.get('balance',0))/hi,DC.ACCENT if i==0 else UI.mix(PANEL,UI.INK,0.35))
                                              for i,a in enumerate(ranked)],sub=(money(usd_total,'USD')+' dari akun USD') if usd else '')
-    run=last_sync_run()
+    run=sync_results()
     rows=[]
     for when,status,aid,name,note in reversed(run[-5:]):
         short=note.split(' · ')[0] if status=='OK' else note
         rows.append((status,name,short[:40],short_time(when+':00')))
     activity.set(rows)
-    by_id={aid:status for _,status,aid,_,_ in run}
-    ok=sum(1 for s in by_id.values() if s=='OK')
+    by_id={aid:status for _,status,aid,_,_ in run}                      # status terbaru tiap akun
+    ids={str(a['id']) for a in accounts}
+    ok=sum(1 for aid,s in by_id.items() if s=='OK' and aid in ids)
     status_grid.set(f'{ok}/{len(accounts)} berhasil' if by_id else 'Belum ada sinkron',
                     [(a['name'],by_id.get(str(a['id']))) for a in sorted(accounts,key=lambda a:int(a['id']))])
 bar=tk.Frame(table_view,bg=BG);bar.pack(fill='x',pady=(0,10))
